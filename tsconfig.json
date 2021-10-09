@@ -1,0 +1,17 @@
+{
+	"exclude": [
+		"node_modules"
+	],
+	"compilerOptions": {
+		"module": "CommonJS",
+		"rootDir": "src",
+		"outDir": "./bin",
+		"lib": ["ES2021"],
+		"target": "ES2021",
+		"exactOptionalPropertyTypes": true,
+		"noFallthroughCasesInSwitch": true,
+		"noImplicitReturns": true,
+		"noPropertyAccessFromIndexSignature": true,
+		"strict": true
+	}
+}

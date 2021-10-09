@@ -1,0 +1,26 @@
+{
+	"name": "mcbingo",
+	"version": "0.0.1",
+	"description": "A Discord bot that announces MinecraftBingo streams.",
+	"keywords": [
+		"Minecraft",
+		"Bingo",
+		"Discord",
+		"Twitch"
+	],
+	"bugs": {
+		"url": "https://github.com/NeunEinser/BingoBot/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/NeunEinser/BingoBot"
+	},
+	"dependencies": {
+		"discord.js": "^13.2.0",
+		"typescript": "^4.4.3"
+	},
+	"scripts": {
+		"start": "tsc && node ./bin",
+		"build": "tsc"
+	}
+}
