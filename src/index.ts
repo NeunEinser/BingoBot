@@ -1,1 +1,3 @@
-console.log('hi');
+import BingoBot from "./BingoBot";
+
+BingoBot.start()

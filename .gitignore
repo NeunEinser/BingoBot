@@ -1,4 +1,5 @@
 bin
+config/local.*
 
 # Logs
 logs
