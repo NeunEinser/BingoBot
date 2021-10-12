@@ -1,8 +1,9 @@
 import { ApiClient, HelixStream } from '@twurple/api';
 import { ClientCredentialsAuthProvider, StaticAuthProvider } from '@twurple/auth';
-import { EventSubListener, EventSubStreamOnlineEvent } from '@twurple/eventsub';
+import { DirectConnectionAdapter, EventSubListener, EventSubStreamOnlineEvent } from '@twurple/eventsub';
 import { NgrokAdapter } from '@twurple/eventsub-ngrok';
 import { EventEmitter } from 'events';
+import BingoBot from './BingoBot';
 
 /**
  * A listener for bingo twitch streams
@@ -25,18 +26,25 @@ export default class TwitchStreamListener {
 	 * https://dev.twitch.tv/docs/eventsub#secret)
 	 * @param trustedStreamers A list of streamers you trust
 	*/
-	constructor(clientId: string, clientSecret: string, eventSubSecret: string, trustedStreamers : Array<string>) {
+	constructor() {
+		const config = BingoBot.config
+		const auth = new ClientCredentialsAuthProvider(config.twitch.clientId, config.twitch.clientSecret);
 
-		const auth = new ClientCredentialsAuthProvider(clientId, clientSecret);
-
+		const adapter = !config.ssl ? new NgrokAdapter() : new DirectConnectionAdapter({
+			hostName: config.ssl.hostName,
+			sslCert: {
+				cert: config.ssl.certificate,
+				key: config.ssl.key
+			}
+		});
 		this.client = new ApiClient({authProvider: auth, });
 		this.listener = new EventSubListener({
 			apiClient: this.client,
-			adapter: new NgrokAdapter(),
-			secret: eventSubSecret
+			adapter: adapter,
+			secret: config.twitch.eventSubSecret
 		})
 
-		this.client.users.getUsersByNames(trustedStreamers).then(users => {
+		this.client.users.getUsersByNames(config.trustedStreamers).then(users => {
 			users.forEach(user => this.trustedStreamers.add(user.id));
 			this.ready = true;
 
