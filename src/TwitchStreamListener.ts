@@ -1,6 +1,6 @@
 import { ApiClient, HelixStream } from '@twurple/api';
 import { ClientCredentialsAuthProvider, StaticAuthProvider } from '@twurple/auth';
-import { DirectConnectionAdapter, EventSubListener, EventSubStreamOnlineEvent } from '@twurple/eventsub';
+import { DirectConnectionAdapter, EventSubListener, EventSubStreamOnlineEvent, EventSubSubscription } from '@twurple/eventsub';
 import { NgrokAdapter } from '@twurple/eventsub-ngrok';
 import { EventEmitter } from 'events';
 import BingoBot from './BingoBot';
@@ -13,8 +13,7 @@ export default class TwitchStreamListener {
 	private readonly client: ApiClient;
 	private readonly listener: EventSubListener;
 	private readonly trustedStreamers = new Set<string>();
-	private knownStreamerIds = new Set<string>();
-	private trustedNonBingoStreamers = new Set<string>(); // This is used to continuesly fetch the title in case they change it to Bingo
+	private knownStreamerIds = new Map<string, EventSubSubscription | null>();
 	private ready = false;
 	private started = false;
 
@@ -66,17 +65,18 @@ export default class TwitchStreamListener {
 	}
 
 	private async internalStart(): Promise<void> {
-		this.trustedStreamers.forEach(streamer => this.listener.subscribeToStreamOnlineEvents(streamer, event => this.handleStreamOnline(event)));
-		this.trustedStreamers.forEach(streamer => this.listener.subscribeToStreamOfflineEvents(streamer, event => {
+		this.trustedStreamers.forEach(streamer => this.listener.subscribeToStreamOnlineEvents(streamer, async event =>
+			await this.handleStream(await event.getStream()))
+		);
+		this.trustedStreamers.forEach(streamer => this.listener.subscribeToStreamOfflineEvents(streamer, async event => {
+			this.eventEmitter.emit('streamerOffline', event.broadcasterId);
+			await this.knownStreamerIds.get(event.broadcasterId)?.stop();
 			this.knownStreamerIds.delete(event.broadcasterId);
-			this.trustedNonBingoStreamers.delete(event.broadcasterId);
-			this.eventEmitter.emit('streamerOffline', event.broadcasterId)
 		}));
 		
 		this.listener.listen();
 
 		this.fetchUntrustedStreams();
-		this.refetchTrustedNonBingoStreams();
 	}
 
 	/**
@@ -117,51 +117,39 @@ export default class TwitchStreamListener {
 			while(streams.data.length > 0) {
 
 				streams.data.forEach((stream) => this.handleStream(stream));
-				streams = await this.client.streams.getStreams({game: '27471', type: 'live', after: streams.cursor, limit:100});
+				streams = await this.client.streams.getStreams({game: '27471', type: 'live', after: streams.cursor, limit: 100});
 			}
 
-			setTimeout(() => this.fetchUntrustedStreams(), 600_000); //fetch every 10 minutes, most streams should be caught by eventsub
+			// fetch every 5 hrs. This is meant to just help me update the list of trusted
+			// streamers, doesn't have to catch every stream, and doesn't have to be real
+			// time. Let's not make Twitch too suspicious of us.
+			setTimeout(() => this.fetchUntrustedStreams(), 18_000_000);
 		}
 		catch (ex) {
 			console.log((ex as Error).message)
+			setTimeout(() => this.fetchUntrustedStreams(), 18_000_000);
 		}
-	}
-
-	private async refetchTrustedNonBingoStreams(): Promise<void> {
-		try {
-			if(this.trustedNonBingoStreamers.size) {
-				let streams = await this.client.streams.getStreams({userId: Array.from(this.trustedNonBingoStreamers), limit: 100});
-				while(streams.data.length > 0) {
-		
-					streams.data.forEach((stream) => this.handleStream(stream));
-					streams = await this.client.streams.getStreams({userId: Array.from(this.trustedNonBingoStreamers), after: streams.cursor, limit: 100});
-				}
-			}
-	
-			setTimeout(() => this.refetchTrustedNonBingoStreams(), 60_000)
-		}
-		catch (ex) {
-			console.log((ex as Error).message)
-		}
-	}
-
-	private async handleStreamOnline(event: EventSubStreamOnlineEvent): Promise<void> {
-		await this.handleStream(await event.getStream())
 	}
 
 	private async handleStream(stream: HelixStream): Promise<void> {
 		if(!this.knownStreamerIds.has(stream.userId)) {
-			if(stream.title.match(/bingo/i)) {
+			if(stream.title.match(/\bbingo\b/i)) {
 
-				this.knownStreamerIds.add(stream.userId);
+				this.knownStreamerIds.set(stream.userId, null);
 
 				if(this.trustedStreamers.has(stream.userId)) {
-					this.eventEmitter.emit('trustedStream', stream)
+					this.eventEmitter.emit('trustedStream', stream);
 				} else {
 					this.eventEmitter.emit('untrustedStream', stream)
 				}
 			} else if (this.trustedStreamers.has(stream.userId)) {
-				this.trustedNonBingoStreamers.add(stream.userId)
+				this.knownStreamerIds.set(stream.userId, await this.listener.subscribeToChannelUpdateEvents(stream.userId, async event => {
+					if(event.streamTitle.match(/\bbingo\b/i)) {
+						this.eventEmitter.emit('trustedStream', stream);
+						await this.knownStreamerIds.get(stream.userId)?.stop();
+						this.knownStreamerIds.set(stream.userId, null);
+					}
+				}));
 			}
 		}
 	}
