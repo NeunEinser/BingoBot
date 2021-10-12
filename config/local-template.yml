@@ -1,0 +1,18 @@
+# This is the token for your Discord bot account
+discordToken: <discord bot token>
+
+# This holds information for your Twitch App.
+twitch:
+  clientId: <twitch client id>
+  clientSecret: <twitch client secret>
+  # The event sub secret can be anything and should be a random string of characters
+  eventSubSecret: <eventsub secret>
+
+# If you want to test locally without a certificate, do not define ssl and setup
+# Ngork on your system instead. https://ngrok.com/
+#
+# This is needed so that Twitch can talk to us for eventsubs
+ssl:
+  hostName: <your domain name>
+  certificate: <the location of your certificate file including all intermediate certifcates>
+  key: <the private key belonging to your certificate>

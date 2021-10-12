@@ -13,19 +13,20 @@ export default class BingoBot {
 	public static async start(): Promise<void> {
 		await this.client.login(this.config.discordToken);
 
-		const channel = (await this.client.channels.fetch('896466836214906910')) as TextChannel;
-		const untrustedChannel = (await this.client.channels.fetch('896511765272199208')) as TextChannel;
+		const announcementChannel = (await this.client.channels.fetch(this.config.logChannel)) as TextChannel;
+		const logChannel = (await this.client.channels.fetch(this.config.announcementChannel)) as TextChannel;
 
 		this.twitchListener = new TwitchStreamListener();
 		
 		const discordAnnouncer = new DiscordAnnouncer();
 
 		this.twitchListener.onTrustedBingoStreamWentLive(async stream => {
-			await discordAnnouncer.sendStreamNotification(stream, channel);
+			await discordAnnouncer.sendStreamNotification(stream, announcementChannel);
+			await discordAnnouncer.sendStreamNotification(stream, logChannel, false);
 		});
 		
 		this.twitchListener.onUntrustedBingoStreamWentLive(async stream => {
-			await discordAnnouncer.sendStreamNotification(stream, untrustedChannel, false);
+			await discordAnnouncer.sendStreamNotification(stream, logChannel, false);
 		});
 		
 		this.twitchListener.onStreamerWentOffline(async broadcasterId => {

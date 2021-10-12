@@ -2,17 +2,25 @@ import config from "config"
 import { readFileSync } from "fs";
 
 export default class BotConfig {
+	public readonly announcementChannel: string;
+	public readonly logChannel: string;
+	public readonly ownerGuild: string;
+	public readonly owner: string; 
 	public readonly trustedStreamers: Array<string>;
 	public readonly ssl?: SSLConfig;
 	public readonly discordToken: string;
 	public readonly twitch: TwitchConfig;
 
 	constructor() {
+		this.announcementChannel = config.get('announcementChannel');
+		this.logChannel = config.get('logChannel');
+		this.ownerGuild = config.get('ownerGuild');
+		this.owner = config.get('owner');
 		this.trustedStreamers = config.get('trustedStreamers');
 		this.discordToken = config.get('discordToken');
 		this.twitch = config.get('twitch');
 
-		try {
+		if(config.has('ssl')) {
 			const sslPaths = config.get<SSLConfig>('ssl');
 			const certificate =  readFileSync(sslPaths.certificate, 'ascii');
 			const key = readFileSync(sslPaths.key, 'ascii');
@@ -21,8 +29,6 @@ export default class BotConfig {
 				certificate: certificate,
 				key: key
 			}
-		} catch {
-			console.log("No ssl config found, will use ngork for twitch eventsub");
 		}
 	}
 }
