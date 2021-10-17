@@ -8,7 +8,7 @@ export default class DiscordAnnouncer {
 		const user = await stream.getUser();
 		const embed = new MessageEmbed({
 			color: 'PURPLE',
-			title: stream.title,
+			title: stream.title.replace(/[\\_*~`|]/g, '\\$&'),
 			url: `https://www.twitch.tv/${user.name}`
 		})
 		.setImage(stream.getThumbnailUrl(320, 180))

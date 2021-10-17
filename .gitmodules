@@ -1,0 +1,3 @@
+[submodule "discordjs-builders"]
+	path = discordjs-builders
+	url = https://github.com/discordjs/builders

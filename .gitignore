@@ -1,6 +1,7 @@
 bin
 config/local.*
 certificate
+data/**
 
 # Logs
 logs

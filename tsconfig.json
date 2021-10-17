@@ -1,6 +1,7 @@
 {
 	"exclude": [
-		"node_modules"
+		"node_modules",
+		"discordjs-builders"
 	],
 	"compilerOptions": {
 		"module": "CommonJS",
