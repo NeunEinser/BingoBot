@@ -35,7 +35,7 @@ export default class BingoBot {
 
 			this.twitchListener = new TwitchStreamListener(twitchClient);
 			
-			const discordAnnouncer = new DiscordAnnouncer();
+			const discordAnnouncer = new DiscordAnnouncer(this.client);
 
 			this.twitchListener.onTrustedBingoBroadcastWentLive(async stream => {
 				try {
@@ -64,9 +64,9 @@ export default class BingoBot {
 
 			const commands = new CommandRegistry(this.client, twitchClient, this.twitchListener);
 			await commands.registerCommands();
-			await this.twitchListener.start();
+			await this.twitchListener.start(discordAnnouncer.trackedBroadcasters);
 
-			this.logger.info('Successfully initialized bot.')
+			this.logger.info('Successfully started bot.')
 
 		} catch (err) {
 			this.logger.error(err);

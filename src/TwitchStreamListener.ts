@@ -45,7 +45,7 @@ export default class TwitchStreamListener {
 	 * All listners should be registered when calling this, as events might be
 	 * triggered from when this method is called first.
 	 */
-	public async start(): Promise<void> {
+	public async start(initialBroadcasters: string[]): Promise<void> {
 		let broadcasters: Array<string>;
 		try {
 			broadcasters = JSON.parse((await readFile('./data/broadcasters.json')).toString('utf8'));
@@ -53,13 +53,29 @@ export default class TwitchStreamListener {
 			broadcasters = [];
 		}
 
+		initialBroadcasters.forEach(broadcaster => this.knownBroadcasterIds.set(broadcaster, null));
+
 		broadcasters.forEach(async userId => {
 			await this.addBroadcasterInternal(userId);
 		});
 		
-		this.listener.listen();
+		await this.listener.listen();
 
-		this.fetchUntrustedStreams();
+		const users = await this.client.users.getUsersByIds(broadcasters);
+		users.forEach(async user => {
+			const stream = await user.getStream();
+			if(stream) {
+				if(!initialBroadcasters.includes(user.id)) {
+					this.handleStream(stream);
+				}
+			} else {
+				if(initialBroadcasters.includes(user.id)) {
+					this.handleStreamOffline(user.id);
+				}
+			}
+		})
+
+		await this.fetchUntrustedStreams();
 	}
 
 	public async addBroadcaster(user: HelixUser): Promise<boolean> {

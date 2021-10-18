@@ -1,9 +1,22 @@
 import { HelixStream } from "@twurple/api";
-import { Message, MessageEmbed, TextChannel } from "discord.js";
+import { Client, MessageEmbed, TextChannel } from "discord.js";
+import { existsSync, readFileSync } from "fs";
+import { mkdir, writeFile } from "fs/promises";
 import BingoBot from "./BingoBot";
 
 export default class DiscordAnnouncer {
-	private broadcasterToMessageDelete = new Map<string, () => Promise<Message>>();
+	private readonly client: Client
+	private broadcasterToMessages: Map<string, {id: string, channelId: string}>;
+
+	constructor(client: Client) {
+		this.client = client;
+		try {
+			const obj = JSON.parse(readFileSync('./data/trackedMessages.json').toString('utf8'));
+			this.broadcasterToMessages = new Map(Object.entries(obj));
+		} catch {
+			this.broadcasterToMessages = new Map<string, {id: string, channelId: string}>();
+		}
+	}
 
 	public async sendStreamNotification(stream: HelixStream, channel: TextChannel, trackMessage = true): Promise<void> {
 		BingoBot.logger.debug(`Sending Discord message for ${stream.userDisplayName} to ${channel.name}.`);
@@ -26,15 +39,31 @@ export default class DiscordAnnouncer {
 
 		if(trackMessage) {
 			BingoBot.logger.debug(`Tracking message ${message.id}.`);
-			this.broadcasterToMessageDelete.set(stream.userId, message.delete);
+			this.broadcasterToMessages.set(stream.userId, {id: message.id, channelId: message.channelId});
+			await this.saveTrackedMessages();
 		}
+	}
+
+	public get trackedBroadcasters(): string[] {
+		return Array.from(this.broadcasterToMessages.keys());
 	}
 
 	public async removeStreamNotification(broadcasterId: string) {
 		BingoBot.logger.debug(`Removing Discord message for ${broadcasterId}`);
-		if(this.broadcasterToMessageDelete.has(broadcasterId)) {
-			this.broadcasterToMessageDelete.get(broadcasterId)!();
-			this.broadcasterToMessageDelete.delete(broadcasterId);
+		if(this.broadcasterToMessages.has(broadcasterId)) {
+			const message = this.broadcasterToMessages.get(broadcasterId)!;
+			const channel = (await this.client.channels.fetch(message.channelId)) as TextChannel;
+			await channel.messages.delete(message.id);
+
+			this.broadcasterToMessages.delete(broadcasterId);
+			await this.saveTrackedMessages();
 		}
+	}
+
+	private async saveTrackedMessages(): Promise<void> {
+		if(!existsSync('./data/')) {
+			await mkdir('./data/');
+		}
+		await writeFile('./data/trackedMessages.json', JSON.stringify(Object.fromEntries(this.broadcasterToMessages)), {flag: 'w', encoding: 'utf8'});
 	}
 }
