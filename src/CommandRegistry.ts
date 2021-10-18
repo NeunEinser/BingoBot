@@ -51,23 +51,23 @@ export default class CommandRegistry {
 		}));
 
 		this.discordClient.on('interactionCreate', async interaction => {
-			if (interaction.isCommand()) {
-				switch (interaction.commandName) {
-					case 'ping':
-						await interaction.reply('Pong!');
-						break;
-					case 'intro':
-						await interaction.reply('I am an awesome Discord bot announcing Bingo streams developed by the best developer of all time.');
-						break;
-					case 'shutdown':
-						await interaction.reply('Shutting down ...')
-						await BingoBot.shutdown();
-						break;
-					case 'streamer':
-						switch (interaction.options.data[0].name)
-						{
-							case 'add':
-								try {
+			try {
+				if (interaction.isCommand()) {
+					switch (interaction.commandName) {
+						case 'ping':
+							await interaction.reply('Pong!');
+							break;
+						case 'intro':
+							await interaction.reply('I am an awesome Discord bot announcing Bingo streams developed by the best developer of all time.');
+							break;
+						case 'shutdown':
+							await interaction.reply('Shutting down ...')
+							await BingoBot.shutdown();
+							break;
+						case 'streamer':
+							switch (interaction.options.data[0].name)
+							{
+								case 'add': {
 									const userName = interaction.options.getString('streamer') ?? '';
 									const user = await this.twitchClient.users.getUserByName(userName);
 									if(!user) {
@@ -81,14 +81,9 @@ export default class CommandRegistry {
 											await interaction.reply(`**${userName}** already was in the list.`);
 										}
 									}
-										
-								} catch (err) {
-									await interaction.reply('Internal error while trying to add user');
-									BingoBot.logger.error(err);
+									break;
 								}
-								break;
-							case 'remove':
-								try {
+								case 'remove': {
 									const userName = interaction.options.getString('streamer') ?? '';
 									const user = await this.twitchClient.users.getUserByName(userName);
 									if(!user) {
@@ -102,21 +97,25 @@ export default class CommandRegistry {
 											await interaction.reply(`**${userName}** did already not exist on the list.`);
 										}
 									}
-										
-								} catch (err) {
-									await interaction.editReply('Internal error while trying to remove user');
-									BingoBot.logger.error(err);
+									break;
 								}
-								break;
-							case 'list':
-								const users = (await Promise.all(this.twitchListener.broadcasters.map(async u => (await this.twitchClient.users.getUserById(u))?.displayName)))
-									.map(u => u?.replace(/[\\_*~`|]/g, '\\$&'))
-									.sort();
-								await interaction.reply(`Currently trusted Bingo streamers:\n${users.join(',\n')}`)
-								break;
+								case 'list': {
+									const users = (await Promise.all(this.twitchListener.broadcasters.map(async u => (await this.twitchClient.users.getUserById(u))?.displayName)))
+										.map(u => u?.replace(/[\\_*~`|]/g, '\\$&'))
+										.sort();
+									await interaction.reply(`Currently trusted Bingo streamers:\n${users.join(',\n')}`)
+									break;
+								}
+							}
 						}
 				}
+			} catch (err) {
+				try {
+					BingoBot.logger.error(err);
+					if(interaction.isCommand() && !interaction.replied)
+						await interaction.reply("Command execution failed");
+				} catch (_) {}
 			}
-		})
+		});
 	}
 }

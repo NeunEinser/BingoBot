@@ -5,8 +5,7 @@ export default class BotConfig {
 	public readonly announcementChannel: string;
 	public readonly logChannel: string;
 	public readonly ownerGuild: string;
-	public readonly owner: string; 
-	public readonly trustedStreamers: Array<string>;
+	public readonly owner: string;
 	public readonly ssl?: SSLConfig;
 	public readonly discordToken: string;
 	public readonly twitch: TwitchConfig;
@@ -16,7 +15,6 @@ export default class BotConfig {
 		this.logChannel = config.get('logChannel');
 		this.ownerGuild = config.get('ownerGuild');
 		this.owner = config.get('owner');
-		this.trustedStreamers = config.get('trustedStreamers');
 		this.discordToken = config.get('discordToken');
 		this.twitch = config.get('twitch');
 

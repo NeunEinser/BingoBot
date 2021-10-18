@@ -1,5 +1,5 @@
-import { ApiClient, HelixStream, HelixUser } from '@twurple/api';
-import { DirectConnectionAdapter, EventSubListener, EventSubStreamOnlineEvent, EventSubSubscription } from '@twurple/eventsub';
+import { ApiClient, HelixStream } from '@twurple/api';
+import { DirectConnectionAdapter, EventSubListener, EventSubSubscription } from '@twurple/eventsub';
 import { NgrokAdapter } from '@twurple/eventsub-ngrok';
 import { EventEmitter } from 'events';
 import { existsSync } from 'fs';
@@ -145,32 +145,36 @@ export default class TwitchStreamListener {
 			// time. Let's not make Twitch too suspicious of us.
 			setTimeout(() => this.fetchUntrustedStreams(), 18_000_000);
 		}
-		catch (ex) {
-			console.log((ex as Error).message)
+		catch (err) {
+			BingoBot.logger.error(err);
 			setTimeout(() => this.fetchUntrustedStreams(), 18_000_000);
 		}
 	}
 
 	private async handleStream(stream: HelixStream): Promise<void> {
-		if(!this.knownStreamerIds.has(stream.userId)) {
-			if(stream.title.match(/\bbingo\b/i)) {
+		try {
+			if(!this.knownStreamerIds.has(stream.userId)) {
+				if(stream.title.match(/\bbingo\b/i)) {
 
-				this.knownStreamerIds.set(stream.userId, null);
+					this.knownStreamerIds.set(stream.userId, null);
 
-				if(this.trustedBroadcasters.has(stream.userId)) {
-					this.eventEmitter.emit('trustedStream', stream);
-				} else {
-					this.eventEmitter.emit('untrustedStream', stream)
-				}
-			} else if (this.trustedBroadcasters.has(stream.userId)) {
-				this.knownStreamerIds.set(stream.userId, await this.listener.subscribeToChannelUpdateEvents(stream.userId, async event => {
-					if(event.streamTitle.match(/\bbingo\b/i)) {
+					if(this.trustedBroadcasters.has(stream.userId)) {
 						this.eventEmitter.emit('trustedStream', stream);
-						await this.knownStreamerIds.get(stream.userId)?.stop();
-						this.knownStreamerIds.set(stream.userId, null);
+					} else {
+						this.eventEmitter.emit('untrustedStream', stream)
 					}
-				}));
+				} else if (this.trustedBroadcasters.has(stream.userId)) {
+					this.knownStreamerIds.set(stream.userId, await this.listener.subscribeToChannelUpdateEvents(stream.userId, async event => {
+						if(event.streamTitle.match(/\bbingo\b/i)) {
+							this.eventEmitter.emit('trustedStream', stream);
+							await this.knownStreamerIds.get(stream.userId)?.stop();
+							this.knownStreamerIds.set(stream.userId, null);
+						}
+					}));
+				}
 			}
+		} catch (err) {
+			BingoBot.logger.error(err);
 		}
 	}
 
