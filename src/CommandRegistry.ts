@@ -74,7 +74,7 @@ export default class CommandRegistry {
 									if(!user) {
 										await interaction.reply(`Could not find twitch user **${userName}**.`);
 									} else {
-										const success = await this.twitchListener.addBroadcaster(user.id);
+										const success = await this.twitchListener.addBroadcaster(user);
 
 										if(success) {
 											await interaction.reply(`Successfully added **${userName}** as trusted bingo streamer.`);

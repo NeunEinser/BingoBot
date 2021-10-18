@@ -1,4 +1,4 @@
-import { ApiClient, HelixStream } from '@twurple/api';
+import { ApiClient, HelixStream, HelixUser } from '@twurple/api';
 import { DirectConnectionAdapter, EventSubListener, EventSubSubscription } from '@twurple/eventsub';
 import { NgrokAdapter } from '@twurple/eventsub-ngrok';
 import { EventEmitter } from 'events';
@@ -62,13 +62,18 @@ export default class TwitchStreamListener {
 		this.fetchUntrustedStreams();
 	}
 
-	public async addBroadcaster(userId: string): Promise<boolean> {
-		if(this.trustedBroadcasters.has(userId)) {
+	public async addBroadcaster(user: HelixUser): Promise<boolean> {
+		if(this.trustedBroadcasters.has(user.id)) {
 			return false;
 		}
 		
-		await this.addBroadcasterInternal(userId);
+		await this.addBroadcasterInternal(user.id);
 		await this.saveBroadcasters();
+
+		const stream = await user.getStream();
+		if(stream) {
+			await this.handleStream(stream);
+		}
 
 		return true;
 	}
@@ -80,6 +85,7 @@ export default class TwitchStreamListener {
 
 		const success = this.trustedBroadcasters.delete(userId);
 		await this.saveBroadcasters();
+		await this.handleStreamOffline(userId);
 		return success;
 	}
 
