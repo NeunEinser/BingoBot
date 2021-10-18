@@ -37,23 +37,37 @@ export default class BingoBot {
 			
 			const discordAnnouncer = new DiscordAnnouncer();
 
-			this.twitchListener.onTrustedBingoStreamWentLive(async stream => {
-				await discordAnnouncer.sendStreamNotification(stream, announcementChannel);
-				await discordAnnouncer.sendStreamNotification(stream, logChannel, false);
+			this.twitchListener.onTrustedBingoBroadcastWentLive(async stream => {
+				try {
+					await discordAnnouncer.sendStreamNotification(stream, announcementChannel);
+					await discordAnnouncer.sendStreamNotification(stream, logChannel, false);
+				} catch (err) {
+					BingoBot.logger.error(err);
+				}
 			});
 			
-			this.twitchListener.onUntrustedBingoStreamWentLive(async stream => {
-				await discordAnnouncer.sendStreamNotification(stream, logChannel, false);
+			this.twitchListener.onUntrustedBingoBroadcastWentLive(async stream => {
+				try {
+					await discordAnnouncer.sendStreamNotification(stream, logChannel, false);
+				} catch (err) {
+					BingoBot.logger.error(err);
+				}
 			});
 			
-			this.twitchListener.onStreamerWentOffline(async broadcasterId => {
-				await discordAnnouncer.removeStreamNotification(broadcasterId);
+			this.twitchListener.onBroadcasterWentOffline(async broadcasterId => {
+				try {
+					await discordAnnouncer.removeStreamNotification(broadcasterId);
+				} catch (err) {
+					BingoBot.logger.error(err);
+				}
 			});
 
 			const commands = new CommandRegistry(this.client, twitchClient, this.twitchListener);
-			commands.registerCommands();
+			await commands.registerCommands();
+			await this.twitchListener.start();
 
-			this.twitchListener.start();
+			this.logger.info('Successfully initialized bot.')
+
 		} catch (err) {
 			this.logger.error(err);
 		}

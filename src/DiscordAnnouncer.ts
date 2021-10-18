@@ -1,10 +1,12 @@
 import { HelixStream } from "@twurple/api";
 import { Message, MessageEmbed, TextChannel } from "discord.js";
+import BingoBot from "./BingoBot";
 
 export default class DiscordAnnouncer {
 	private broadcasterToMessageDelete = new Map<string, () => Promise<Message>>();
 
 	public async sendStreamNotification(stream: HelixStream, channel: TextChannel, trackMessage = true): Promise<void> {
+		BingoBot.logger.debug(`Sending Discord message for ${stream.userDisplayName} to ${channel.name}.`);
 		const user = await stream.getUser();
 		const embed = new MessageEmbed({
 			color: 'PURPLE',
@@ -22,11 +24,14 @@ export default class DiscordAnnouncer {
 			embeds: [embed]
 		});
 
-		if(trackMessage)
+		if(trackMessage) {
+			BingoBot.logger.debug(`Tracking message ${message.id}.`);
 			this.broadcasterToMessageDelete.set(stream.userId, message.delete);
+		}
 	}
 
 	public async removeStreamNotification(broadcasterId: string) {
+		BingoBot.logger.debug(`Removing Discord message for ${broadcasterId}`);
 		if(this.broadcasterToMessageDelete.has(broadcasterId)) {
 			this.broadcasterToMessageDelete.get(broadcasterId)!();
 			this.broadcasterToMessageDelete.delete(broadcasterId);

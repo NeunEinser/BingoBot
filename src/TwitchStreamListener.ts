@@ -14,7 +14,7 @@ export default class TwitchStreamListener {
 	private readonly client: ApiClient;
 	private readonly listener: EventSubListener;
 	private trustedBroadcasters = new Map<string, { streamOnlineSub: EventSubSubscription, streamOfflineSub: EventSubSubscription }>();
-	private knownStreamerIds = new Map<string, EventSubSubscription | null>();
+	private knownBroadcasterIds = new Map<string, EventSubSubscription | null>();
 
 	/** 
 	 * Constructs a TwitchStreamListener
@@ -22,7 +22,7 @@ export default class TwitchStreamListener {
 	 * @param clientSecret The twitch client secret
 	 * @param eventSubSecret The randomly generated eventsubsecret (see
 	 * https://dev.twitch.tv/docs/eventsub#secret)
-	 * @param trustedStreamers A list of streamers you trust
+	 * @param trustedBroadcasters A list of broadcasters you trust
 	*/
 	constructor(client: ApiClient) {
 		this.client = client;
@@ -88,47 +88,48 @@ export default class TwitchStreamListener {
 	}
 
 	private async addBroadcasterInternal(userId: string): Promise<void> {
-		const onlineSub = await this.listener.subscribeToStreamOnlineEvents(userId, async event =>
-			await this.handleStream(await event.getStream()));
+		const onlineSub = await this.listener.subscribeToStreamOnlineEvents(userId, async event => {
+			BingoBot.logger.debug(`Received stream online event for ${event.broadcasterDisplayName}.`);
+			await this.handleStream(await event.getStream())
+		});
 
 		const offlineSub = await this.listener.subscribeToStreamOfflineEvents(userId, async event => {
-			this.eventEmitter.emit('streamerOffline', event.broadcasterId);
-			await this.knownStreamerIds.get(event.broadcasterId)?.stop();
-			this.knownStreamerIds.delete(event.broadcasterId);
+			BingoBot.logger.debug(`Received stream offline event for ${event.broadcasterDisplayName}.`);
+			await this.handleStreamOffline(event.broadcasterId);
 		});
 		this.trustedBroadcasters.set(userId, {streamOnlineSub: onlineSub, streamOfflineSub: offlineSub});
 	}
 
 	/**
 	 * The given event handler is called with the stream as argument whenever
-	 * a trusted streamer goes live.
-	 * @param handler The function being called when a trusted streamer goes live
+	 * a trusted broadcaster goes live.
+	 * @param handler The function being called when a trusted broadcaster goes live
 	 */
-	public onTrustedBingoStreamWentLive(handler : (stream: HelixStream) => void) {
+	public onTrustedBingoBroadcastWentLive(handler : (stream: HelixStream) => void) {
 		this.eventEmitter.on('trustedStream', handler)
 	}
 	
 	/**
 	 * The given event handler is called with the stream as argument whenever
-	 * an untrusted streamer goes live.
+	 * an untrusted broadcaster goes live.
 	 * 
 	 * Since the twitch api does not provied a native listner, all streams are
-	 * fetched every 10 minutes. This generally means that untrusted streamers
+	 * fetched every 10 minutes. This generally means that untrusted broadcasters
 	 * will have a higher delay.
 	 * 
-	 * @param handler The function being called when an untrusted streamer goes live
+	 * @param handler The function being called when an untrusted broadcaster goes live
 	 */
-	public onUntrustedBingoStreamWentLive(handler: (stream: HelixStream) => void) {
+	public onUntrustedBingoBroadcastWentLive(handler: (stream: HelixStream) => void) {
 		this.eventEmitter.on('untrustedStream', handler)
 	}
 	
 	/**
-	 * This event is called whenever a trusted bingo streamer goes offline.
+	 * This event is called whenever a trusted bingo broadcaster goes offline.
 	 * 
-	 * @param handler The function being called when an untrusted streamer goes live
+	 * @param handler The function being called when an untrusted broadcaster goes live
 	 */
-	public onStreamerWentOffline(handler : (broadcasterId: string) => void) {
-		this.eventEmitter.on('untrustedStream', handler)
+	public onBroadcasterWentOffline(handler : (broadcasterId: string) => void) {
+		this.eventEmitter.on('broadcasterOffline', handler)
 	}
 
 	private async fetchUntrustedStreams(): Promise<void> {
@@ -141,7 +142,7 @@ export default class TwitchStreamListener {
 			}
 
 			// fetch every 5 hrs. This is meant to just help me update the list of trusted
-			// streamers, doesn't have to catch every stream, and doesn't have to be real
+			// broadcasters, doesn't have to catch every stream, and doesn't have to be real
 			// time. Let's not make Twitch too suspicious of us.
 			setTimeout(() => this.fetchUntrustedStreams(), 18_000_000);
 		}
@@ -153,10 +154,10 @@ export default class TwitchStreamListener {
 
 	private async handleStream(stream: HelixStream): Promise<void> {
 		try {
-			if(!this.knownStreamerIds.has(stream.userId)) {
+			if(!this.knownBroadcasterIds.has(stream.userId)) {
 				if(stream.title.match(/\bbingo\b/i)) {
 
-					this.knownStreamerIds.set(stream.userId, null);
+					this.knownBroadcasterIds.set(stream.userId, null);
 
 					if(this.trustedBroadcasters.has(stream.userId)) {
 						this.eventEmitter.emit('trustedStream', stream);
@@ -164,15 +165,25 @@ export default class TwitchStreamListener {
 						this.eventEmitter.emit('untrustedStream', stream)
 					}
 				} else if (this.trustedBroadcasters.has(stream.userId)) {
-					this.knownStreamerIds.set(stream.userId, await this.listener.subscribeToChannelUpdateEvents(stream.userId, async event => {
+					this.knownBroadcasterIds.set(stream.userId, await this.listener.subscribeToChannelUpdateEvents(stream.userId, async event => {
 						if(event.streamTitle.match(/\bbingo\b/i)) {
 							this.eventEmitter.emit('trustedStream', stream);
-							await this.knownStreamerIds.get(stream.userId)?.stop();
-							this.knownStreamerIds.set(stream.userId, null);
+							await this.knownBroadcasterIds.get(stream.userId)?.stop();
+							this.knownBroadcasterIds.set(stream.userId, null);
 						}
 					}));
 				}
 			}
+		} catch (err) {
+			BingoBot.logger.error(err);
+		}
+	}
+
+	private async handleStreamOffline(broadcasterId: string): Promise<void> {
+		try {
+			this.eventEmitter.emit('broadcasterOffline', broadcasterId);
+			await this.knownBroadcasterIds.get(broadcasterId)?.stop();
+			this.knownBroadcasterIds.delete(broadcasterId);
 		} catch (err) {
 			BingoBot.logger.error(err);
 		}
