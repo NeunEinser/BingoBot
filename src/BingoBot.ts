@@ -18,10 +18,11 @@ export default class BingoBot {
 		try {
 			log4js.configure({
 				appenders: {
-					out: { type: 'stdout' }
+					out: { type: 'stdout' },
+					file: { type: 'file', filename: `logs/${new Date().toISOString().replace(/[:.]/g, '_')}` }
 				},
 				categories: {
-					default: { appenders: [ 'out' ], level: 'debug' }
+					default: { appenders: [ 'out', 'file' ], level: 'debug' }
 				}
 			});
 

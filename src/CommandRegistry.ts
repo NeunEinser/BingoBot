@@ -72,14 +72,14 @@ export default class CommandRegistry {
 									const userName = interaction.options.getString('streamer') ?? '';
 									const user = await this.twitchClient.users.getUserByName(userName);
 									if(!user) {
-										await interaction.reply(`Could not find twitch user **${userName}**.`);
+										await interaction.reply(`Could not find twitch user **${userName.discordEscape()}**.`);
 									} else {
 										const success = await this.twitchListener.addBroadcaster(user);
 
 										if(success) {
-											await interaction.reply(`Successfully added **${userName}** as trusted bingo streamer.`);
+											await interaction.reply(`Successfully added **${userName.discordEscape()}** as trusted bingo streamer.`);
 										} else {
-											await interaction.reply(`**${userName}** already was in the list.`);
+											await interaction.reply(`**${userName.discordEscape()}** already was in the list.`);
 										}
 									}
 									break;
@@ -88,22 +88,22 @@ export default class CommandRegistry {
 									const userName = interaction.options.getString('streamer') ?? '';
 									const user = await this.twitchClient.users.getUserByName(userName);
 									if(!user) {
-										await interaction.reply(`Could not find twitch user **${userName}**.`);
+										await interaction.reply(`Could not find twitch user **${userName.discordEscape()}**.`);
 									} else {
 										const success = await this.twitchListener.removeBroadcaster(user.id);
 
 										if(success) {
-											await interaction.reply(`Successfully removed **${userName}** from the trusted bingo streamers.`);
+											await interaction.reply(`Successfully removed **${userName.discordEscape()}** from the trusted bingo streamers.`);
 										} else {
-											await interaction.reply(`**${userName}** did already not exist on the list.`);
+											await interaction.reply(`**${userName.discordEscape()}** did already not exist on the list.`);
 										}
 									}
 									break;
 								}
 								case 'list': {
 									const users = (await Promise.all(this.twitchListener.broadcasters.map(async u => (await this.twitchClient.users.getUserById(u))?.displayName)))
-										.map(u => u?.replace(/[\\_*~`|]/g, '\\$&'))
-										.sort();
+										.map(u => u?.discordEscape() ?? '')
+										.sort((a, b) => a.localeCompare(b));
 									await interaction.reply(`Currently trusted Bingo streamers:\n${users.join(',\n')}`)
 									break;
 								}
