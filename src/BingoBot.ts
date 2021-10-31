@@ -65,7 +65,7 @@ export default class BingoBot {
 
 			const commands = new CommandRegistry(this.client, twitchClient, this.twitchListener);
 			await commands.registerCommands();
-			await this.twitchListener.start(discordAnnouncer.trackedBroadcasters);
+			await this.twitchListener.start();
 
 			this.logger.info('Successfully started bot.')
 

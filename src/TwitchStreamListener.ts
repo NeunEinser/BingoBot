@@ -45,7 +45,7 @@ export default class TwitchStreamListener {
 	 * All listners should be registered when calling this, as events might be
 	 * triggered from when this method is called first.
 	 */
-	public async start(initialBroadcasters: string[]): Promise<void> {
+	public async start(): Promise<void> {
 		let broadcasters: Array<string>;
 		try {
 			broadcasters = JSON.parse((await readFile('./data/broadcasters.json')).toString('utf8'));
@@ -63,9 +63,7 @@ export default class TwitchStreamListener {
 			if(stream) {
 				this.handleStream(stream);
 			} else {
-				if(initialBroadcasters.includes(user.id)) {
-					this.handleStreamOffline(user.id);
-				}
+				this.handleStreamOffline(user.id);
 			}
 		});
 		await this.listener.listen();
@@ -191,8 +189,10 @@ export default class TwitchStreamListener {
 	private async handleStreamOffline(broadcasterId: string): Promise<void> {
 		try {
 			this.eventEmitter.emit('broadcasterOffline', broadcasterId);
-			await this.liveTrustedBroadcasters.get(broadcasterId)!.stop();
-			this.liveTrustedBroadcasters.delete(broadcasterId);
+			if(this.liveTrustedBroadcasters.has(broadcasterId)) {
+				await this.liveTrustedBroadcasters.get(broadcasterId)!.stop();
+				this.liveTrustedBroadcasters.delete(broadcasterId);
+			}
 		} catch (err) {
 			BingoBot.logger.error(err);
 		}
