@@ -39,7 +39,8 @@ export default class DiscordAnnouncer {
 		.addField('Started', `<t:${Math.round(stream.startDate.getTime() / 1_000)}:R>`, true)
 		.addField('Viewers', `${stream.viewers}`, true);
 		if(image) {
-			embed.setImage(image);
+			// random query param is to avoid caching
+			embed.setImage(`${image}/${Math.random()}`);
 		}
 
 		const messagePayload: MessageOptions = {
