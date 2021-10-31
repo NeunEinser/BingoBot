@@ -53,30 +53,22 @@ export default class TwitchStreamListener {
 			broadcasters = [];
 		}
 
-		initialBroadcasters.forEach(async broadcasterId => this.liveTrustedBroadcasters.set(
-			broadcasterId, 
-			await this.listener.subscribeToChannelUpdateEvents(broadcasterId, async event => await this.handleStreamUpdate(event)))
-		);
-
 		broadcasters.forEach(async userId => {
 			await this.addBroadcasterInternal(userId);
 		});
-		
-		await this.listener.listen();
 
 		const users = await this.client.users.getUsersByIds(broadcasters);
 		users.forEach(async user => {
 			const stream = await user.getStream();
 			if(stream) {
-				if(!initialBroadcasters.includes(user.id)) {
-					this.handleStream(stream);
-				}
+				this.handleStream(stream);
 			} else {
 				if(initialBroadcasters.includes(user.id)) {
 					this.handleStreamOffline(user.id);
 				}
 			}
-		})
+		});
+		await this.listener.listen();
 
 		await this.fetchUntrustedStreams();
 	}
