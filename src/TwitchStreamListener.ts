@@ -4,6 +4,7 @@ import { NgrokAdapter } from '@twurple/eventsub-ngrok';
 import { EventEmitter } from 'events';
 import { existsSync } from 'fs';
 import { mkdir, readFile, writeFile } from 'fs/promises';
+import { stringify } from 'querystring';
 import BingoBot from './BingoBot';
 
 /**
@@ -159,7 +160,7 @@ export default class TwitchStreamListener {
 			let streams = await this.client.streams.getStreams({game: '27471', type: 'live', limit: 100});
 			while(streams.data.length > 0) {
 
-				streams.data.forEach((stream) => this.handleStream(stream));
+				streams.data.forEach(async stream => await this.handleStream(stream));
 				streams = await this.client.streams.getStreams({game: '27471', type: 'live', after: streams.cursor, limit: 100});
 			}
 
@@ -184,7 +185,7 @@ export default class TwitchStreamListener {
 					} else {
 						this.eventEmitter.emit('untrustedStream', stream)
 					}
-				} else if (this.trustedBroadcasters.has(stream.userId)) {
+				} else if (this.trustedBroadcasters.has(stream.userId) && !this.liveTrustedBroadcasters.has(stream.userId)) {
 					this.liveTrustedBroadcasters.set(stream.userId, await this.listener.subscribeToChannelUpdateEvents(stream.userId, async event => {
 						try {
 							BingoBot.logger.info(`Received channel update event for ${stream.userDisplayName}\n${JSON.stringify(event)}`);

@@ -1,3 +1,12 @@
+# This is your local config.
+# You may override anything set in default.yml as well, for example to test on
+# your own private testserver and seting the ids accordingly.
+
+# Following are configurations that are not set in default.yml containing
+# tokens and secrets.
+
+### NEVER COMMIT ANY TOKEN OR ANY SECRET ###
+
 # This is the token for your Discord bot account
 discordToken: <discord bot token>
 
@@ -11,7 +20,9 @@ twitch:
 # If you want to test locally without a certificate, do not define ssl and setup
 # Ngork on your system instead. https://ngrok.com/
 #
-# This is needed so that Twitch can talk to us for eventsubs
+# To use ngork, simply don't specify the ssl object in your file.
+#
+# If this is set, the bot will use your domain and certificate.
 ssl:
   hostName: <your domain name>
   certificate: <the location of your certificate file including all intermediate certifcates>
