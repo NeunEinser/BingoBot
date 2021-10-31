@@ -1,7 +1,8 @@
 import { HelixStream } from "@twurple/api";
-import { Client, MessageEmbed, TextChannel } from "discord.js";
+import { Client, MessageEmbed, MessageOptions, TextChannel } from "discord.js";
 import { existsSync, readFileSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
+import { get } from "https";
 import BingoBot from "./BingoBot";
 
 export default class DiscordAnnouncer {
@@ -19,28 +20,45 @@ export default class DiscordAnnouncer {
 	}
 
 	public async sendStreamNotification(stream: HelixStream, channel: TextChannel, trackMessage = true): Promise<void> {
-		BingoBot.logger.debug(`Sending Discord message for ${stream.userDisplayName} to ${channel.name}.`);
+		BingoBot.logger.info(`Sending Discord message for ${stream.userDisplayName} to ${channel.name}.`);
 		const user = await stream.getUser();
+		let image: string | null = stream.getThumbnailUrl(320, 180);
+		if(!await this.checkThumbnail(image)) {
+			image = stream.thumbnailUrl
+			if(!await this.checkThumbnail(image)) {
+				image = null
+			}
+		}
 		const embed = new MessageEmbed({
 			color: 'PURPLE',
 			title: stream.title.discordEscape(),
 			url: `https://www.twitch.tv/${user.name}`
 		})
-		.setImage(stream.getThumbnailUrl(320, 180))
 		.setThumbnail(user.profilePictureUrl)
 		.addField('Language', stream.language.discordEscape(), true)
 		.addField('Started', `<t:${Math.round(stream.startDate.getTime() / 1_000)}:R>`, true)
 		.addField('Viewers', `${stream.viewers}`, true);
-			
-		const message = await channel.send({
+		if(image) {
+			embed.setImage(image);
+		}
+
+		const messagePayload: MessageOptions = {
 			content: `**${user.displayName.discordEscape()}** is live playing Bingo on <https://www.twitch.tv/${user.name}>`,
 			embeds: [embed]
-		});
+		}
+			
+		if(!this.broadcasterToMessages.has(stream.userId) || this.broadcasterToMessages.get(stream.userId)!.channelId != channel.id) {
+			const message = await channel.send(messagePayload);
 
-		if(trackMessage) {
-			BingoBot.logger.info(`Tracking message ${message.id} for broadcaster ${user.displayName}.`);
-			this.broadcasterToMessages.set(stream.userId, {id: message.id, channelId: message.channelId});
-			await this.saveTrackedMessages();
+			if(trackMessage) {
+				BingoBot.logger.info(`Tracking message ${message.id} for broadcaster ${user.displayName}.`);
+				this.broadcasterToMessages.set(stream.userId, {id: message.id, channelId: message.channelId});
+				await this.saveTrackedMessages();
+			}
+
+		} else {
+			const message = await channel.messages.fetch(this.broadcasterToMessages.get(stream.userId)!.id);
+			await message.edit(messagePayload);
 		}
 	}
 
@@ -49,6 +67,7 @@ export default class DiscordAnnouncer {
 	}
 
 	public async removeStreamNotification(broadcasterId: string) {
+		BingoBot.logger.debug(`Received stream offline for ${broadcasterId}.`);
 		if(this.broadcasterToMessages.has(broadcasterId)) {
 			BingoBot.logger.info(`Removing Discord message for ${broadcasterId}.`);
 			const message = this.broadcasterToMessages.get(broadcasterId)!;
@@ -65,5 +84,19 @@ export default class DiscordAnnouncer {
 			await mkdir('./data/');
 		}
 		await writeFile('./data/trackedMessages.json', JSON.stringify(Object.fromEntries(this.broadcasterToMessages)), {flag: 'w', encoding: 'utf8'});
+	}
+
+	private checkThumbnail(thumbnailUrl: string): Promise<boolean> {
+		return new Promise<boolean>(resolve => {
+			get(thumbnailUrl, res => {
+				if (res.statusCode! >= 400) {
+					resolve(false);
+				} else {
+					const headerLocation = res.rawHeaders.findIndex(val => val.match(/X-404-Redirect/i))
+					const is404Redirect = headerLocation !== -1 && res.rawHeaders[headerLocation + 1] === 'true'
+					resolve(!is404Redirect);
+				}
+			});
+		});
 	}
 }

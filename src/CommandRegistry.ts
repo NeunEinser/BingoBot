@@ -53,7 +53,7 @@ export default class CommandRegistry {
 		this.discordClient.on('interactionCreate', async interaction => {
 			try {
 				if (interaction.isCommand()) {
-					BingoBot.logger.debug(`Received command ${interaction.commandName}\n${JSON.stringify(interaction.options.data)}`);
+					BingoBot.logger.info(`Received command ${interaction.commandName}\n${JSON.stringify(interaction.options.data)}`);
 					switch (interaction.commandName) {
 						case 'ping':
 							await interaction.reply('Pong!');

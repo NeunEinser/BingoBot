@@ -2,6 +2,7 @@ import config from "config"
 import { readFileSync } from "fs";
 
 export default class BotConfig {
+	public readonly logLevel: 'all' | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'mark' | 'off';
 	public readonly announcementChannel: string;
 	public readonly logChannel: string;
 	public readonly ownerGuild: string;
@@ -11,6 +12,7 @@ export default class BotConfig {
 	public readonly twitch: TwitchConfig;
 
 	constructor() {
+		this.logLevel = config.get('logLevel');
 		this.announcementChannel = config.get('announcementChannel');
 		this.logChannel = config.get('logChannel');
 		this.ownerGuild = config.get('ownerGuild');

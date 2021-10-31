@@ -22,7 +22,7 @@ export default class BingoBot {
 					file: { type: 'file', filename: `logs/${new Date().toISOString().replace(/[:.]/g, '_')}.log` }
 				},
 				categories: {
-					default: { appenders: [ 'out', 'file' ], level: 'debug' }
+					default: { appenders: [ 'out', 'file' ], level: this.config.logLevel }
 				}
 			});
 
@@ -70,7 +70,7 @@ export default class BingoBot {
 			this.logger.info('Successfully started bot.')
 
 		} catch (err) {
-			this.logger.error(err);
+			this.logger.fatal(err);
 		}
 	}
 

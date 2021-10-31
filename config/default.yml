@@ -1,3 +1,6 @@
+# If you want to override these settings locally, you may do so in local.yml
+
+logLevel: 'info'
 logChannel: '901531018622812230'
 announcementChannel: '899755317343170630'
 ownerGuild: '825494099560759357'
