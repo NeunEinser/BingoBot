@@ -104,8 +104,9 @@ export default class TwitchStreamListener {
 
 	private async addBroadcasterInternal(userId: string): Promise<void> {
 		const onlineSub = await this.listener.subscribeToStreamOnlineEvents(userId, async event => {
-			BingoBot.logger.info(`Received stream online event for ${event.broadcasterDisplayName} (${event.broadcasterId}).`);
-			await this.handleStream(await event.getStream())
+			const stream = await event.getStream();
+			BingoBot.logger.info(`Received stream online event for ${event.broadcasterDisplayName} (${event.broadcasterId}): "${stream.title}" (playing ${stream.gameName}/${stream.gameId}).`);
+			await this.handleStream(stream);
 		});
 
 		const offlineSub = await this.listener.subscribeToStreamOfflineEvents(userId, async event => {
@@ -170,15 +171,22 @@ export default class TwitchStreamListener {
 	private async handleStream(stream: HelixStream): Promise<void> {
 		try {
 			BingoBot.logger.debug(`Handling stream "${stream.title}" by ${stream.userDisplayName}.`);
-			if(!this.liveTrustedBroadcasters.has(stream.userId) && stream.title.match(/bingo/i) && stream.gameId == '27471') {
+			if(!this.liveTrustedBroadcasters.has(stream.userId)) {
+				BingoBot.logger.debug(`${stream.userDisplayName} not known to be live.`);
+
 				if(this.trustedBroadcasters.has(stream.userId)) {
 					this.liveTrustedBroadcasters.set(
 						stream.userId,
 						await this.listener.subscribeToChannelUpdateEvents(stream.userId, async event => await this.handleStreamUpdate(event))
 					);
-					this.eventEmitter.emit('trustedStream', stream);
-				} else {
-					this.eventEmitter.emit('untrustedStream', stream)
+				}
+				if(stream.title.match(/bingo/i) && stream.gameId == '27471') {
+					BingoBot.logger.info(`${stream.userDisplayName} is live playing Bingo!`);
+					if(this.trustedBroadcasters.has(stream.userId)) {
+						this.eventEmitter.emit('trustedStream', stream);
+					} else {
+						this.eventEmitter.emit('untrustedStream', stream)
+					}
 				}
 			}
 		} catch (err) {

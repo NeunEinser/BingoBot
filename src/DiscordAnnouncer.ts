@@ -20,7 +20,7 @@ export default class DiscordAnnouncer {
 	}
 
 	public async sendStreamNotification(stream: HelixStream, channel: TextChannel, trackMessage = true): Promise<void> {
-		BingoBot.logger.info(`Sending Discord message for ${stream.userDisplayName} to ${channel.name}.`);
+		BingoBot.logger.debug(`Preparing Discord message for ${stream.userDisplayName} to ${channel.name}.`);
 		const user = await stream.getUser();
 		let image: string | null = stream.getThumbnailUrl(320, 180);
 		if(!await this.checkThumbnail(image)) {
@@ -49,6 +49,7 @@ export default class DiscordAnnouncer {
 		}
 			
 		if(!this.broadcasterToMessages.has(stream.userId) || this.broadcasterToMessages.get(stream.userId)!.channelId != channel.id) {
+			BingoBot.logger.info(`Sending Discord message for ${stream.userDisplayName} to ${channel.name}.`);
 			const message = await channel.send(messagePayload);
 
 			if(trackMessage) {
@@ -58,6 +59,7 @@ export default class DiscordAnnouncer {
 			}
 
 		} else {
+			BingoBot.logger.info(`Updating Discord message for ${stream.userDisplayName} in ${channel.name}.`);
 			const message = await channel.messages.fetch(this.broadcasterToMessages.get(stream.userId)!.id);
 			await message.edit(messagePayload);
 		}
