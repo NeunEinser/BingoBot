@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from '@discordjs/builders';
 import { ApiClient } from '@twurple/api';
-import { ApplicationCommandDataResolvable, Client } from 'discord.js';
+import { Client } from 'discord.js';
 import { ApplicationCommandPermissionTypes } from 'discord.js/typings/enums';
 import BingoBot from './BingoBot';
 import TwitchStreamListener from './TwitchStreamListener';
@@ -23,7 +23,7 @@ export default class CommandRegistry {
 			new SlashCommandBuilder().setName('ping').setDescription('Checks if the bot is responsive').setDefaultPermission(true),
 			new SlashCommandBuilder().setName('intro').setDescription('Who I am').setDefaultPermission(true)
 		]
-		await commandApi.set(userCommandDefs.map(c => c.toJSON() as ApplicationCommandDataResolvable /*Dunno why ts thinks this is incompatible*/));
+		await commandApi.set(userCommandDefs.map(c => c.toJSON()));
 
 		const ownerCommandDefs = [
 			new SlashCommandBuilder().setName('shutdown').setDescription('Shuts the bot down').setDefaultPermission(false),
@@ -41,7 +41,7 @@ export default class CommandRegistry {
 				)
 		];
 
-		const ownerCommands = await commandApi.set(ownerCommandDefs.map(c => c.toJSON() as ApplicationCommandDataResolvable), BingoBot.config.ownerGuild);
+		const ownerCommands = await commandApi.set(ownerCommandDefs.map(c => c.toJSON()), BingoBot.config.ownerGuild);
 		ownerCommands.forEach(async val => await val.permissions.add({
 			permissions: [{
 				id: BingoBot.config.owner,
