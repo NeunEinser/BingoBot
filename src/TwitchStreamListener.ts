@@ -1,4 +1,5 @@
 import { ApiClient, HelixStream, HelixUser } from '@twurple/api';
+import { rawDataSymbol } from '@twurple/common';
 import { DirectConnectionAdapter, EventSubChannelUpdateEvent, EventSubListener, EventSubSubscription } from '@twurple/eventsub';
 import { NgrokAdapter } from '@twurple/eventsub-ngrok';
 import { EventEmitter } from 'events';
@@ -211,6 +212,7 @@ export default class TwitchStreamListener {
 			BingoBot.logger.info(`Received channel update event for ${event.broadcasterDisplayName}`);
 			if(event.streamTitle.match(/bingo/i) && event.categoryId === '27471') {
 				const stream = (await this.client.streams.getStreams({userId: event.broadcasterId})).data[0];
+				stream[rawDataSymbol].title = event.streamTitle;
 				this.eventEmitter.emit('trustedStream', stream);
 			} else {
 				this.eventEmitter.emit('broadcasterOffline', event.broadcasterId);
