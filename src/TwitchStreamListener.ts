@@ -54,6 +54,7 @@ export default class TwitchStreamListener {
 			broadcasters = [];
 		}
 
+		await this.client.eventSub.deleteAllSubscriptions();
 		broadcasters.forEach(async userId => {
 			await this.addBroadcasterInternal(userId);
 		});
