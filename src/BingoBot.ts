@@ -79,6 +79,6 @@ export default class BingoBot {
 		await this.twitchListener.destroy();
 		log4js.shutdown();
 
-		process.exit(1);
+		process.exit(0);
 	}
 }
