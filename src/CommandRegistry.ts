@@ -1,7 +1,6 @@
 import { SlashCommandBuilder } from '@discordjs/builders';
 import { ApiClient } from '@twurple/api';
-import { Client } from 'discord.js';
-import { ApplicationCommandPermissionTypes } from 'discord.js/typings/enums';
+import { ApplicationCommandDataResolvable, Client } from 'discord.js';
 import BingoBot from './BingoBot';
 import TwitchStreamListener from './TwitchStreamListener';
 
@@ -19,13 +18,9 @@ export default class CommandRegistry {
 	public async registerCommands(): Promise<void> {
 		const commandApi = this.discordClient.application!.commands
 
-		const userCommandDefs = [
+		const commandDefs = [
 			new SlashCommandBuilder().setName('ping').setDescription('Checks if the bot is responsive').setDefaultPermission(true),
-			new SlashCommandBuilder().setName('intro').setDescription('Who I am').setDefaultPermission(true)
-		]
-		await commandApi.set(userCommandDefs.map(c => c.toJSON()));
-
-		const ownerCommandDefs = [
+			new SlashCommandBuilder().setName('intro').setDescription('Who I am').setDefaultPermission(true),
 			new SlashCommandBuilder().setName('shutdown').setDescription('Shuts the bot down').setDefaultPermission(false),
 			new SlashCommandBuilder().setName('streamer').setDescription('Manages bingo streamers').setDefaultPermission(false)
 				.addSubcommand(sub =>
@@ -39,16 +34,8 @@ export default class CommandRegistry {
 					sub.setName('remove').setDescription('Removes a new streamer')
 						.addStringOption(str => str.setName('streamer').setDescription('The username of the streamer').setRequired(true))
 				)
-		];
-
-		const ownerCommands = await commandApi.set(ownerCommandDefs.map(c => c.toJSON()), BingoBot.config.ownerGuild);
-		ownerCommands.forEach(async val => await val.permissions.add({
-			permissions: [{
-				id: BingoBot.config.owner,
-				type: ApplicationCommandPermissionTypes.USER,
-				permission: true
-			}]
-		}));
+		]
+		await commandApi.set(commandDefs.map(d => d.toJSON() as ApplicationCommandDataResolvable));
 
 		this.discordClient.on('interactionCreate', async interaction => {
 			try {
