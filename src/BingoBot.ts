@@ -16,16 +16,6 @@ export default class BingoBot {
 
 	public static async start(): Promise<void> {
 		try {
-			log4js.configure({
-				appenders: {
-					out: { type: 'stdout' },
-					file: { type: 'file', filename: `logs/${new Date().toISOString().replace(/[:.]/g, '_')}.log` }
-				},
-				categories: {
-					default: { appenders: [ 'out', 'file' ], level: this.config.logLevel }
-				}
-			});
-
 			await this.client.login(this.config.discordToken);
 			
 			const auth = new ClientCredentialsAuthProvider(this.config.twitch.clientId, this.config.twitch.clientSecret);
@@ -33,6 +23,17 @@ export default class BingoBot {
 
 			const announcementChannel = (await this.client.channels.fetch(this.config.announcementChannel)) as TextChannel;
 			const logChannel = (await this.client.channels.fetch(this.config.logChannel)) as TextChannel;
+			
+			log4js.configure({
+				appenders: {
+					out: { type: 'stdout' },
+					file: { type: 'file', filename: `logs/${new Date().toISOString().replace(/[:.]/g, '_')}.log` },
+					discord: { type: 'DiscordAppender', getChannel: () => logChannel }
+				},
+				categories: {
+					default: { appenders: [ 'out', 'file', 'discord' ], level: this.config.logLevel }
+				}
+			});
 
 			this.twitchListener = new TwitchStreamListener(twitchClient);
 			
@@ -41,7 +42,7 @@ export default class BingoBot {
 			this.twitchListener.onTrustedBingoBroadcastWentLive(async stream => {
 				try {
 					await discordAnnouncer.sendStreamNotification(stream, announcementChannel);
-					await discordAnnouncer.sendStreamNotification(stream, logChannel, false);
+					await discordAnnouncer.sendStreamNotification(stream, logChannel, false, '(already trusted)');
 				} catch (err) {
 					BingoBot.logger.error(err);
 				}
@@ -49,7 +50,7 @@ export default class BingoBot {
 			
 			this.twitchListener.onUntrustedBingoBroadcastWentLive(async stream => {
 				try {
-					await discordAnnouncer.sendStreamNotification(stream, logChannel, false);
+					await discordAnnouncer.sendStreamNotification(stream, logChannel, false, '(untrusted)');
 				} catch (err) {
 					BingoBot.logger.error(err);
 				}
@@ -71,6 +72,10 @@ export default class BingoBot {
 
 		} catch (err) {
 			this.logger.fatal(err);
+			this.client?.destroy();
+			await this.twitchListener?.destroy();
+			log4js?.shutdown();
+			process.exit(-1);
 		}
 	}
 

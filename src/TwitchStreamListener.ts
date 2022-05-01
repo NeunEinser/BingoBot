@@ -14,6 +14,7 @@ export default class TwitchStreamListener {
 	private readonly eventEmitter = new EventEmitter();
 	private readonly client: ApiClient;
 	private readonly listener: EventSubListener;
+	private isListening = false;
 	private trustedBroadcasters = new Map<string, { streamOnlineSub: EventSubSubscription, streamOfflineSub: EventSubSubscription }>();
 	private liveTrustedBroadcasters = new Map<string, EventSubSubscription>();
 
@@ -69,6 +70,7 @@ export default class TwitchStreamListener {
 			}
 		});
 		await this.listener.listen();
+		this.isListening = true;
 
 		await this.fetchUntrustedStreams();
 	}
@@ -224,7 +226,8 @@ export default class TwitchStreamListener {
 	}
 
 	public async destroy(): Promise<void> {
-		await this.listener.unlisten()
+		if(this.isListening)
+			await this.listener.unlisten()
 	}
 
 	private async saveBroadcasters(): Promise<void> {

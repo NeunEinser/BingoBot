@@ -19,7 +19,7 @@ export default class DiscordAnnouncer {
 		}
 	}
 
-	public async sendStreamNotification(stream: HelixStream, channel: TextChannel, trackMessage = true): Promise<void> {
+	public async sendStreamNotification(stream: HelixStream, channel: TextChannel, trackMessage = true, logInfo = ''): Promise<void> {
 		BingoBot.logger.debug(`Preparing Discord message for ${stream.userDisplayName} to ${channel.name}.`);
 		const user = await stream.getUser();
 		let image: string | null = stream.getThumbnailUrl(320, 180);
@@ -44,7 +44,7 @@ export default class DiscordAnnouncer {
 		}
 
 		const messagePayload: MessageOptions = {
-			content: `**${user.displayName.discordEscape()}** is live playing Bingo on <https://www.twitch.tv/${user.name}>`,
+			content: `**${user.displayName.discordEscape()}** is live playing Bingo on <https://www.twitch.tv/${user.name}>${logInfo}`,
 			embeds: [embed]
 		}
 			
