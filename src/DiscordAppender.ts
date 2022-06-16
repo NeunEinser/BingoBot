@@ -5,7 +5,7 @@ import { Config, LayoutFunction, LayoutsParam, LoggingEvent } from "log4js";
 function stdoutAppender(layout: LayoutFunction, config: DiscordAppenderConfig) {
 	const channel = config.getChannel();
 	return async (loggingEvent: LoggingEvent) => {
-		await channel.send(layout(loggingEvent));
+		await channel.send(layout(loggingEvent).discordEscape());
 	};
 }
 
