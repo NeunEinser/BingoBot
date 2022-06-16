@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from '@discordjs/builders';
 import { ApiClient } from '@twurple/api';
-import { ApplicationCommandDataResolvable, Client } from 'discord.js';
+import { Client } from 'discord.js';
 import BingoBot from './BingoBot';
 import TwitchStreamListener from './TwitchStreamListener';
 
@@ -21,8 +21,8 @@ export default class CommandRegistry {
 		const commandDefs = [
 			new SlashCommandBuilder().setName('ping').setDescription('Checks if the bot is responsive'),
 			new SlashCommandBuilder().setName('intro').setDescription('Who I am'),
-			new SlashCommandBuilder().setName('shutdown').setDescription('Shuts the bot down').setDefaultMemberPermissions(0),
-			new SlashCommandBuilder().setName('streamer').setDescription('Manages bingo streamers').setDefaultMemberPermissions(0)
+			new SlashCommandBuilder().setName('shutdown').setDescription('Shuts the bot down').setDefaultPermission(false),
+			new SlashCommandBuilder().setName('streamer').setDescription('Manages bingo streamers').setDefaultPermission(false)
 				.addSubcommand(sub =>
 					sub.setName('list').setDescription('Lists all streamers')
 				)
