@@ -19,10 +19,10 @@ export default class CommandRegistry {
 		const commandApi = this.discordClient.application!.commands
 
 		const commandDefs = [
-			new SlashCommandBuilder().setName('ping').setDescription('Checks if the bot is responsive').setDefaultPermission(true),
-			new SlashCommandBuilder().setName('intro').setDescription('Who I am').setDefaultPermission(true),
-			new SlashCommandBuilder().setName('shutdown').setDescription('Shuts the bot down').setDefaultPermission(false),
-			new SlashCommandBuilder().setName('streamer').setDescription('Manages bingo streamers').setDefaultPermission(false)
+			new SlashCommandBuilder().setName('ping').setDescription('Checks if the bot is responsive'),
+			new SlashCommandBuilder().setName('intro').setDescription('Who I am'),
+			new SlashCommandBuilder().setName('shutdown').setDescription('Shuts the bot down').setDefaultMemberPermissions(0),
+			new SlashCommandBuilder().setName('streamer').setDescription('Manages bingo streamers').setDefaultMemberPermissions(0)
 				.addSubcommand(sub =>
 					sub.setName('list').setDescription('Lists all streamers')
 				)
@@ -35,7 +35,7 @@ export default class CommandRegistry {
 						.addStringOption(str => str.setName('streamer').setDescription('The username of the streamer').setRequired(true))
 				)
 		]
-		await commandApi.set(commandDefs.map(d => d.toJSON() as ApplicationCommandDataResolvable));
+		await commandApi.set(commandDefs.map(d => d.toJSON()));
 
 		this.discordClient.on('interactionCreate', async interaction => {
 			try {

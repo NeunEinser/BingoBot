@@ -16,7 +16,7 @@
 		"url": "https://github.com/NeunEinser/BingoBot"
 	},
 	"dependencies": {
-		"@discordjs/builders": "^0.13.0",
+		"@discordjs/builders": "^0.15.0",
 		"@twurple/api": "^5.0.5",
 		"@twurple/eventsub": "^5.0.5",
 		"@twurple/eventsub-ngrok": "^5.0.5",

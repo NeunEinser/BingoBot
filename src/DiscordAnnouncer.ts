@@ -1,5 +1,5 @@
 import { HelixStream } from "@twurple/api";
-import { Client, MessageEmbed, MessageOptions, TextChannel } from "discord.js";
+import { Client, MessageEditOptions, MessageEmbed, MessageOptions, TextChannel } from "discord.js";
 import { existsSync, readFileSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import { get } from "https";
@@ -43,7 +43,7 @@ export default class DiscordAnnouncer {
 			embed.setImage(`${image}/${Math.random()}`);
 		}
 
-		const messagePayload: MessageOptions = {
+		const messagePayload: MessageOptions & MessageEditOptions = {
 			content: `**${user.displayName.discordEscape()}** is live playing Bingo on <https://www.twitch.tv/${user.name}> ${logInfo}`,
 			embeds: [embed]
 		}
