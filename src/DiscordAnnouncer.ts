@@ -44,7 +44,7 @@ export default class DiscordAnnouncer {
 		}
 
 		const messagePayload: MessageOptions = {
-			content: `**${user.displayName.discordEscape()}** is live playing Bingo on <https://www.twitch.tv/${user.name}>${logInfo}`,
+			content: `**${user.displayName.discordEscape()}** is live playing Bingo on <https://www.twitch.tv/${user.name}> ${logInfo}`,
 			embeds: [embed]
 		}
 			
