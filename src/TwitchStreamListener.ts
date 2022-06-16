@@ -212,7 +212,7 @@ export default class TwitchStreamListener {
 
 	private async handleStreamUpdate(event: EventSubChannelUpdateEvent): Promise<void> {
 		try {
-			BingoBot.logger.info(`Received channel update event for ${event.broadcasterDisplayName}`);
+			BingoBot.logger.info(`Received channel update event for ${event.broadcasterDisplayName} (${event.broadcasterId}): "${event.streamTitle}" (playing ${event.categoryName}/${event.categoryId}).`);
 			if(event.streamTitle.match(/bingo/i) && event.categoryId === '27471') {
 				const stream = (await this.client.streams.getStreams({userId: event.broadcasterId})).data[0];
 				stream[rawDataSymbol].title = event.streamTitle;
