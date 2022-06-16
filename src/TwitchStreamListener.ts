@@ -61,15 +61,18 @@ export default class TwitchStreamListener {
 			await this.addBroadcasterInternal(userId);
 		});
 
-		const users = await this.client.users.getUsersByIds(broadcasters);
-		users.forEach(async user => {
-			const stream = await user.getStream();
-			if(stream) {
-				this.handleStream(stream);
-			} else {
-				this.handleStreamOffline(user.id);
-			}
-		});
+		const liveBroadcasters: string[] = []
+		// Twitch API only accepts a maximum of 100 user IDs
+		for (let i = 0; i < broadcasters.length; i+=100) {
+			const streams = await this.client.streams.getStreams({userId: broadcasters.slice(i, i + 100), limit: 100});
+
+			streams.data.forEach(s => {
+				liveBroadcasters.push(s.userId);
+				this.handleStream(s);
+			});
+		}
+
+		broadcasters.filter(b => !liveBroadcasters.includes(b)).forEach(b => this.handleStreamOffline(b));
 		await this.listener.listen();
 		this.isListening = true;
 
