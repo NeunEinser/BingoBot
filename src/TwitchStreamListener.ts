@@ -38,7 +38,8 @@ export default class TwitchStreamListener {
 		this.listener = new EventSubListener({
 			apiClient: this.client,
 			adapter: adapter,
-			secret: BingoBot.config.twitch.eventSubSecret
+			secret: BingoBot.config.twitch.eventSubSecret,
+			strictHostCheck: false
 		});
 	}
 
