@@ -158,11 +158,11 @@ export default class TwitchStreamListener {
 
 	private async fetchUntrustedStreams(): Promise<void> {
 		try {
-			let streams = await this.client.streams.getStreams({game: '27471', type: 'live', limit: 100});
+			let streams = await this.client.streams.getStreams({game: '27471', type: 'live', language: 'en', limit: 100});
 			while(streams.data.length > 0) {
 
 				streams.data.forEach(async stream => await this.handleStream(stream));
-				streams = await this.client.streams.getStreams({game: '27471', type: 'live', after: streams.cursor, limit: 100});
+				streams = await this.client.streams.getStreams({game: '27471', type: 'live', language: 'en', after: streams.cursor, limit: 100});
 			}
 
 			// fetch every 5 hrs. This is meant to just help me update the list of trusted
