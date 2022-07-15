@@ -188,7 +188,7 @@ export default class TwitchStreamListener {
 						await this.listener.subscribeToChannelUpdateEvents(stream.userId, async event => await this.handleStreamUpdate(event))
 					);
 				}
-				if(stream.title.match(/bingo/i) && stream.gameId == '27471') {
+				if(stream.title.match(/(?:bingo|fetchr)/i) && stream.gameId == '27471') {
 					BingoBot.logger.info(`${stream.userDisplayName} is live playing Bingo!`);
 					if(this.trustedBroadcasters.has(stream.userId)) {
 						this.eventEmitter.emit('trustedStream', stream);
@@ -217,7 +217,7 @@ export default class TwitchStreamListener {
 	private async handleStreamUpdate(event: EventSubChannelUpdateEvent): Promise<void> {
 		try {
 			BingoBot.logger.info(`Received channel update event for ${event.broadcasterDisplayName} (${event.broadcasterId}): "${event.streamTitle}" (playing ${event.categoryName}/${event.categoryId}).`);
-			if(event.streamTitle.match(/bingo/i) && event.categoryId === '27471') {
+			if(event.streamTitle.match(/(?:bingo|fetchr)/i) && event.categoryId === '27471') {
 				const stream = (await this.client.streams.getStreams({userId: event.broadcasterId})).data[0];
 				stream[rawDataSymbol].title = event.streamTitle;
 				this.eventEmitter.emit('trustedStream', stream);
