@@ -1,14 +1,14 @@
 import * as log4js from 'log4js';
 import { ApiClient } from "@twurple/api";
 import { ClientCredentialsAuthProvider } from '@twurple/auth';
-import { Client, Intents, TextChannel } from "discord.js";
+import { Client, IntentsBitField, TextChannel } from "discord.js";
 import BotConfig from "./BotConfig";
 import CommandRegistry from "./CommandRegistry";
 import DiscordAnnouncer from "./DiscordAnnouncer";
 import TwitchStreamListener from "./TwitchStreamListener";
 
 export default class BingoBot {
-	private static readonly client : Client = new Client({intents: Intents.FLAGS.GUILD_MESSAGES});
+	private static readonly client : Client = new Client({intents: IntentsBitField.Flags.GuildMessages});
 	public static readonly config = new BotConfig();
 	public static readonly logger = log4js.getLogger('BingoBot');
 

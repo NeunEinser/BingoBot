@@ -1,6 +1,5 @@
-import { SlashCommandBuilder } from '@discordjs/builders';
 import { ApiClient } from '@twurple/api';
-import { Client } from 'discord.js';
+import { Client, SlashCommandBuilder } from 'discord.js';
 import BingoBot from './BingoBot';
 import TwitchStreamListener from './TwitchStreamListener';
 
@@ -21,8 +20,8 @@ export default class CommandRegistry {
 		const commandDefs = [
 			new SlashCommandBuilder().setName('ping').setDescription('Checks if the bot is responsive'),
 			new SlashCommandBuilder().setName('intro').setDescription('Who I am'),
-			new SlashCommandBuilder().setName('shutdown').setDescription('Shuts the bot down').setDefaultPermission(false),
-			new SlashCommandBuilder().setName('streamer').setDescription('Manages bingo streamers').setDefaultPermission(false)
+			new SlashCommandBuilder().setName('shutdown').setDescription('Shuts the bot down').setDefaultMemberPermissions('0').setDMPermission(false),
+			new SlashCommandBuilder().setName('streamer').setDescription('Manages bingo streamers').setDefaultMemberPermissions('0').setDMPermission(false)
 				.addSubcommand(sub =>
 					sub.setName('list').setDescription('Lists all streamers')
 				)
@@ -39,7 +38,7 @@ export default class CommandRegistry {
 
 		this.discordClient.on('interactionCreate', async interaction => {
 			try {
-				if (interaction.isCommand()) {
+				if (interaction.isChatInputCommand()) {
 					BingoBot.logger.info(`Received command ${interaction.commandName}\n${JSON.stringify(interaction.options.data)}`);
 					switch (interaction.commandName) {
 						case 'ping':

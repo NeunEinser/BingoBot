@@ -1,5 +1,5 @@
 import { HelixStream } from "@twurple/api";
-import { Client, MessageEditOptions, MessageEmbed, MessageOptions, TextChannel } from "discord.js";
+import { Client, MessageEditOptions, MessageOptions, TextChannel, EmbedBuilder, Colors } from "discord.js";
 import { existsSync, readFileSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import { get } from "https";
@@ -29,15 +29,16 @@ export default class DiscordAnnouncer {
 				image = null
 			}
 		}
-		const embed = new MessageEmbed({
-			color: 'PURPLE',
-			title: stream.title.discordEscape(),
-			url: `https://www.twitch.tv/${user.name}`
-		})
+		const embed = new EmbedBuilder()
+		.setTitle(stream.title.discordEscape())
+		.setColor(Colors.Purple)
+		.setURL(`https://www.twitch.tv/${user.name}`)
 		.setThumbnail(user.profilePictureUrl)
-		.addField('Language', stream.language.discordEscape(), true)
-		.addField('Started', `<t:${Math.round(stream.startDate.getTime() / 1_000)}:R>`, true)
-		.addField('Viewers', `${stream.viewers}`, true);
+		.addFields(
+			{ name: 'Started', value: `<t:${Math.round(stream.startDate.getTime() / 1_000)}:R>`, inline: true },
+			{ name: 'Viewers', value: stream.viewers.toLocaleString('en'), inline: true },
+			{ name: 'Mature', value: stream.isMature ? 'Yes' : 'No', inline: true }
+		)
 		if(image) {
 			// random query param is to avoid caching
 			embed.setImage(`${image}/${Math.random()}`);
@@ -45,7 +46,7 @@ export default class DiscordAnnouncer {
 
 		const messagePayload: MessageOptions & MessageEditOptions = {
 			content: `**${user.displayName.discordEscape()}** is live playing Bingo on <https://www.twitch.tv/${user.name}> ${logInfo}`,
-			embeds: [embed]
+			embeds: [embed.toJSON()]
 		}
 			
 		if(!this.broadcasterToMessages.has(stream.userId) || this.broadcasterToMessages.get(stream.userId)!.channelId != channel.id) {
