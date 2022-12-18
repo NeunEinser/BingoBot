@@ -52,6 +52,8 @@ export default class DiscordAnnouncer {
 		if(!this.broadcasterToMessages.has(stream.userId) || this.broadcasterToMessages.get(stream.userId)!.channelId != channel.id) {
 			BingoBot.logger.info(`Sending Discord message for ${stream.userDisplayName} to ${channel.name}.`);
 			const message = await channel.send(messagePayload);
+			if(message.crosspostable)
+				await message.crosspost()
 
 			if(trackMessage) {
 				BingoBot.logger.info(`Tracking message ${message.id} for broadcaster ${user.displayName}.`);
