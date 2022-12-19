@@ -1,14 +1,14 @@
 import * as log4js from 'log4js';
 import { ApiClient } from "@twurple/api";
 import { ClientCredentialsAuthProvider } from '@twurple/auth';
-import { Client, IntentsBitField, TextChannel } from "discord.js";
+import { Client, IntentsBitField, NewsChannel, TextChannel } from "discord.js";
 import BotConfig from "./BotConfig";
 import CommandRegistry from "./CommandRegistry";
 import DiscordAnnouncer from "./DiscordAnnouncer";
 import TwitchStreamListener from "./TwitchStreamListener";
 
 export default class BingoBot {
-	private static readonly client : Client = new Client({intents: IntentsBitField.Flags.GuildMessages});
+	private static readonly client : Client = new Client({intents: IntentsBitField.Flags.GuildMessages | IntentsBitField.Flags.Guilds});
 	public static readonly config = new BotConfig();
 	public static readonly logger = log4js.getLogger('BingoBot');
 
@@ -21,7 +21,7 @@ export default class BingoBot {
 			const auth = new ClientCredentialsAuthProvider(this.config.twitch.clientId, this.config.twitch.clientSecret);
 			const twitchClient = new ApiClient({authProvider: auth, });
 
-			const announcementChannel = (await this.client.channels.fetch(this.config.announcementChannel)) as TextChannel;
+			const announcementChannel = (await this.client.channels.fetch(this.config.announcementChannel)) as NewsChannel;
 			const logChannel = (await this.client.channels.fetch(this.config.logChannel)) as TextChannel;
 			
 			log4js.configure({
