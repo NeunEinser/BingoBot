@@ -1,5 +1,5 @@
 import { HelixStream } from "@twurple/api";
-import { Client, MessageEditOptions, MessageCreateOptions, TextChannel, EmbedBuilder, Colors, NewsChannel } from "discord.js";
+import { Client, MessageEditOptions, MessageCreateOptions, TextChannel, EmbedBuilder, Colors, NewsChannel, Message } from "discord.js";
 import { existsSync, readFileSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import { get } from "https";
@@ -7,7 +7,7 @@ import BingoBot from "./BingoBot";
 
 export default class DiscordAnnouncer {
 	private readonly client: Client
-	private broadcasterToMessages: Map<string, {id: string, channelId: string}>;
+	private broadcasterToMessages: Map<string, SavedMessage>;
 
 	constructor(client: Client) {
 		this.client = client;
@@ -15,7 +15,7 @@ export default class DiscordAnnouncer {
 			const obj = JSON.parse(readFileSync('./data/trackedMessages.json').toString('utf8'));
 			this.broadcasterToMessages = new Map(Object.entries(obj));
 		} catch {
-			this.broadcasterToMessages = new Map<string, {id: string, channelId: string}>();
+			this.broadcasterToMessages = new Map<string, SavedMessage>();
 		}
 	}
 
@@ -48,23 +48,29 @@ export default class DiscordAnnouncer {
 			content: `**${user.displayName.discordEscape()}** is live playing Bingo on <https://www.twitch.tv/${user.name}> ${logInfo}`,
 			embeds: [embed.toJSON()]
 		}
-			
-		if(!this.broadcasterToMessages.has(stream.userId) || this.broadcasterToMessages.get(stream.userId)!.channelId != channel.id) {
-			BingoBot.logger.info(`Sending Discord message for ${stream.userDisplayName} to ${channel.name}.`);
-			const message = await channel.send(messagePayload);
-			if(message.crosspostable)
-				await message.crosspost()
+		
+		let existingMessage = this.getExistingMessage(stream.userId, channel.id);
+		let message: Message;
 
-			if(trackMessage) {
-				BingoBot.logger.info(`Tracking message ${message.id} for broadcaster ${user.displayName}.`);
-				this.broadcasterToMessages.set(stream.userId, {id: message.id, channelId: message.channelId});
-				await this.saveTrackedMessages();
-			}
+		if(!existingMessage) {
+			BingoBot.logger.info(`Sending Discord message for ${stream.userDisplayName} to ${channel.name}.`);
+			message = await channel.send(messagePayload);
+			if(message.crosspostable)
+				await message.crosspost();
 
 		} else {
 			BingoBot.logger.info(`Updating Discord message for ${stream.userDisplayName} in ${channel.name}.`);
-			const message = await channel.messages.fetch(this.broadcasterToMessages.get(stream.userId)!.id);
+			message = await channel.messages.fetch(existingMessage.id);
 			await message.edit(messagePayload);
+		}
+
+		if(trackMessage) {
+			BingoBot.logger.info(`Tracking message ${message.id} for broadcaster ${user.displayName}.`);
+			const savedMessage = existingMessage ?? {id: message.id, channelId: message.channelId, start: Math.floor(Date.now() / 1_000)};
+			savedMessage.end = undefined;
+
+			this.broadcasterToMessages.set(stream.userId, savedMessage);
+			await this.saveTrackedMessages();
 		}
 	}
 
@@ -76,11 +82,16 @@ export default class DiscordAnnouncer {
 		BingoBot.logger.debug(`Received stream offline for ${broadcasterId}.`);
 		if(this.broadcasterToMessages.has(broadcasterId)) {
 			BingoBot.logger.info(`Removing Discord message for ${broadcasterId}.`);
-			const message = this.broadcasterToMessages.get(broadcasterId)!;
-			const channel = (await this.client.channels.fetch(message.channelId)) as TextChannel;
-			await channel.messages.delete(message.id);
+			const savedMessage = this.broadcasterToMessages.get(broadcasterId)!;
+			const channel = (await this.client.channels.fetch(savedMessage.channelId)) as TextChannel;
+			const message = await channel.messages.fetch(savedMessage.id);
 
-			this.broadcasterToMessages.delete(broadcasterId);
+			const now = Math.floor (Date.now() / 1_000);
+			const diffInHours = Math.floor((now - savedMessage.start) / 3_600);
+
+			message.edit({ content: message.content.replace('is live', 'was live') + `\n Online Time: <t:${savedMessage.start}:f> - <t:${now}:t> (${diffInHours} hours)`, embeds: [] });
+
+			this.broadcasterToMessages.set(broadcasterId, { ...savedMessage, end: now });
 			await this.saveTrackedMessages();
 		}
 	}
@@ -105,4 +116,31 @@ export default class DiscordAnnouncer {
 			});
 		});
 	}
+
+	private getExistingMessage(broadcasterId: string, channelId: string): SavedMessage | undefined {
+		if(this.broadcasterToMessages.has(broadcasterId)) {
+			const foundMessage = this.broadcasterToMessages.get(broadcasterId)!;
+
+			// channel id doesn't match
+			if(foundMessage.channelId !== channelId)
+				return;
+
+			// stream has not ended
+			if(!foundMessage.end)
+				return foundMessage;
+
+			// stream ended less than 30 minutes ago (count as restart)
+			if(Date.now() / 1_000 - foundMessage.end <= 1_800)
+				return foundMessage;
+		}
+		
+		return;
+	}
+}
+
+interface SavedMessage {
+	id: string;
+	channelId: string;
+	start: number;
+	end?: number;
 }
