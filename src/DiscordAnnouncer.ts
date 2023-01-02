@@ -86,12 +86,18 @@ export default class DiscordAnnouncer {
 			const channel = (await this.client.channels.fetch(savedMessage.channelId)) as TextChannel;
 			const message = await channel.messages.fetch(savedMessage.id);
 
-			const now = Math.floor (Date.now() / 1_000);
-			const diffInHours = Math.floor((now - savedMessage.start) / 3_600);
+			const end = savedMessage.end ?? Math.floor (Date.now() / 1_000);
+			const diffInHours = Math.floor((end - savedMessage.start) / 3_600);
 
-			message.edit({ content: message.content.replace('is live', 'was live') + `\n Online Time: <t:${savedMessage.start}:f> - <t:${now}:t> (${diffInHours} hours)`, embeds: [] });
+			let messageContent = message.content.replace('is live', 'was live');
+			const endOfLine = messageContent.indexOf("\n")
+			if(endOfLine != -1)
+				messageContent = messageContent.substring(0, endOfLine);
 
-			this.broadcasterToMessages.set(broadcasterId, { ...savedMessage, end: now });
+			messageContent += `\n Online Time: <t:${savedMessage.start}:f> - <t:${end}:t> (${diffInHours} hours)`;
+			message.edit({ content: messageContent, embeds: [] });
+
+			this.broadcasterToMessages.set(broadcasterId, { ...savedMessage, end: end });
 			await this.saveTrackedMessages();
 		}
 	}
@@ -100,6 +106,11 @@ export default class DiscordAnnouncer {
 		if(!existsSync('./data/')) {
 			await mkdir('./data/');
 		}
+		for (let kvp of this.broadcasterToMessages) {
+			if (!DiscordAnnouncer.trackMessage(kvp[1]))
+				this.broadcasterToMessages.delete(kvp[0]);
+		}
+
 		await writeFile('./data/trackedMessages.json', JSON.stringify(Object.fromEntries(this.broadcasterToMessages)), {flag: 'w', encoding: 'utf8'});
 	}
 
@@ -126,15 +137,18 @@ export default class DiscordAnnouncer {
 				return;
 
 			// stream has not ended
-			if(!foundMessage.end)
-				return foundMessage;
-
-			// stream ended less than 30 minutes ago (count as restart)
-			if(Date.now() / 1_000 - foundMessage.end <= 1_800)
+			if(DiscordAnnouncer.trackMessage(foundMessage))
 				return foundMessage;
 		}
 		
 		return;
+	}
+
+	private static trackMessage(msg: SavedMessage) {
+		if(!msg.end)
+			return true;
+
+		return Date.now() / 1_000 - msg.end <= 1_800
 	}
 }
 
