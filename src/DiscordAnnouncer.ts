@@ -74,31 +74,24 @@ export default class DiscordAnnouncer {
 		}
 	}
 
-	public get trackedBroadcasters(): string[] {
-		return Array.from(this.broadcasterToMessages.keys());
-	}
-
 	public async removeStreamNotification(broadcasterId: string) {
 		BingoBot.logger.debug(`Received stream offline for ${broadcasterId}.`);
 		if(this.broadcasterToMessages.has(broadcasterId)) {
 			BingoBot.logger.info(`Removing Discord message for ${broadcasterId}.`);
 			const savedMessage = this.broadcasterToMessages.get(broadcasterId)!;
-			const channel = (await this.client.channels.fetch(savedMessage.channelId)) as TextChannel;
-			const message = await channel.messages.fetch(savedMessage.id);
 
-			const end = savedMessage.end ?? Math.floor (Date.now() / 1_000);
-			const diffInHours = Math.floor((end - savedMessage.start) / 3_600);
+			if(!savedMessage.end) {
+				const channel = (await this.client.channels.fetch(savedMessage.channelId)) as TextChannel;
+				const message = await channel.messages.fetch(savedMessage.id);
 
-			let messageContent = message.content.replace('is live', 'was live');
-			const endOfLine = messageContent.indexOf("\n")
-			if(endOfLine != -1)
-				messageContent = messageContent.substring(0, endOfLine);
+				const now = Math.floor (Date.now() / 1_000);
+				const diffInHours = Math.floor((now - savedMessage.start) / 3_600);
 
-			messageContent += `\n Online Time: <t:${savedMessage.start}:f> - <t:${end}:t> (${diffInHours} hours)`;
-			message.edit({ content: messageContent, embeds: [] });
+				message.edit({ content: message.content.replace('is live', 'was live') + `\n Online Time: <t:${savedMessage.start}:f> - <t:${now}:t> (${diffInHours} hours)`, embeds: [] });
 
-			this.broadcasterToMessages.set(broadcasterId, { ...savedMessage, end: end });
-			await this.saveTrackedMessages();
+				this.broadcasterToMessages.set(broadcasterId, { ...savedMessage, end: now });
+				await this.saveTrackedMessages();
+			}
 		}
 	}
 
