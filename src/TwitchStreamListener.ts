@@ -1,6 +1,7 @@
 import { ApiClient, HelixStream, HelixUser } from '@twurple/api';
 import { rawDataSymbol } from '@twurple/common';
-import { DirectConnectionAdapter, EventSubChannelUpdateEvent, EventSubListener, EventSubSubscription } from '@twurple/eventsub';
+import { EventSubChannelUpdateEvent, EventSubSubscription } from '@twurple/eventsub-base';
+import { DirectConnectionAdapter, EventSubHttpListener } from '@twurple/eventsub-http';
 import { NgrokAdapter } from '@twurple/eventsub-ngrok';
 import { EventEmitter } from 'events';
 import { existsSync } from 'fs';
@@ -13,7 +14,7 @@ import BingoBot from './BingoBot';
 export default class TwitchStreamListener {
 	private readonly eventEmitter = new EventEmitter();
 	private readonly client: ApiClient;
-	private readonly listener: EventSubListener;
+	private readonly listener: EventSubHttpListener;
 	private isListening = false;
 	private trustedBroadcasters = new Map<string, { streamOnlineSub: EventSubSubscription, streamOfflineSub: EventSubSubscription }>();
 	private liveTrustedBroadcasters = new Map<string, EventSubSubscription>();
@@ -35,11 +36,11 @@ export default class TwitchStreamListener {
 				key: BingoBot.config.ssl.key
 			}
 		});
-		this.listener = new EventSubListener({
+		this.listener = new EventSubHttpListener({
 			apiClient: this.client,
 			adapter: adapter,
 			secret: BingoBot.config.twitch.eventSubSecret,
-			strictHostCheck: false
+			strictHostCheck: true
 		});
 	}
 
@@ -58,7 +59,7 @@ export default class TwitchStreamListener {
 
 		await this.client.eventSub.deleteAllSubscriptions();
 		broadcasters.forEach(async userId => {
-			await this.addBroadcasterInternal(userId);
+			this.addBroadcasterInternal(userId);
 		});
 
 		const liveBroadcasters: string[] = []
@@ -73,7 +74,7 @@ export default class TwitchStreamListener {
 		}
 
 		broadcasters.filter(b => !liveBroadcasters.includes(b)).forEach(b => this.handleStreamOffline(b));
-		await this.listener.listen();
+		this.listener.start();
 		this.isListening = true;
 
 		await this.fetchUntrustedStreams();
@@ -84,12 +85,12 @@ export default class TwitchStreamListener {
 			return false;
 		}
 		
-		await this.addBroadcasterInternal(user.id);
+		this.addBroadcasterInternal(user.id);
 		await this.saveBroadcasters();
 
 		const stream = await user.getStream();
 		if(stream) {
-			await this.handleStream(stream);
+			this.handleStream(stream);
 		}
 
 		return true;
@@ -97,12 +98,12 @@ export default class TwitchStreamListener {
 
 	public async removeBroadcaster(userId: string): Promise<boolean> {
 		const eventSubs = this.trustedBroadcasters.get(userId);
-		await eventSubs?.streamOnlineSub.stop();
-		await eventSubs?.streamOfflineSub.stop();
+		eventSubs?.streamOnlineSub.stop();
+		eventSubs?.streamOfflineSub.stop();
 
 		const success = this.trustedBroadcasters.delete(userId);
 		await this.saveBroadcasters();
-		await this.handleStreamOffline(userId);
+		this.handleStreamOffline(userId);
 		return success;
 	}
 
@@ -110,16 +111,20 @@ export default class TwitchStreamListener {
 		return Array.from(this.trustedBroadcasters.keys());
 	}
 
-	private async addBroadcasterInternal(userId: string): Promise<void> {
-		const onlineSub = await this.listener.subscribeToStreamOnlineEvents(userId, async event => {
+	private addBroadcasterInternal(userId: string) {
+		const onlineSub = this.listener.onStreamOnline(userId, async event => {
 			const stream = await event.getStream();
+			if (stream === null) {
+				BingoBot.logger.error(`Received stream online event for ${event.broadcasterDisplayName} (${event.broadcasterId}), but could not fetch stream data.`);
+				return;
+			}
 			BingoBot.logger.info(`Received stream online event for ${event.broadcasterDisplayName} (${event.broadcasterId}): "${stream.title}" (playing ${stream.gameName}/${stream.gameId}).`);
-			await this.handleStream(stream);
+			this.handleStream(stream);
 		});
 
-		const offlineSub = await this.listener.subscribeToStreamOfflineEvents(userId, async event => {
+		const offlineSub = this.listener.onStreamOffline(userId, async event => {
 			BingoBot.logger.info(`Received stream offline event for ${event.broadcasterDisplayName} (${event.broadcasterId}).`);
-			await this.handleStreamOffline(event.broadcasterId);
+			this.handleStreamOffline(event.broadcasterId);
 		});
 		this.trustedBroadcasters.set(userId, {streamOnlineSub: onlineSub, streamOfflineSub: offlineSub});
 	}
@@ -161,7 +166,7 @@ export default class TwitchStreamListener {
 			let streams = await this.client.streams.getStreams({game: '27471', type: 'live', language: 'en', limit: 100});
 			while(streams.data.length > 0) {
 
-				streams.data.forEach(async stream => await this.handleStream(stream));
+				streams.data.forEach(async stream => this.handleStream(stream));
 				streams = await this.client.streams.getStreams({game: '27471', type: 'live', language: 'en', after: streams.cursor, limit: 100});
 			}
 
@@ -176,7 +181,7 @@ export default class TwitchStreamListener {
 		}
 	}
 
-	private async handleStream(stream: HelixStream): Promise<void> {
+	private handleStream(stream: HelixStream) {
 		try {
 			BingoBot.logger.debug(`Handling stream "${stream.title}" by ${stream.userDisplayName}.`);
 			if(!this.liveTrustedBroadcasters.has(stream.userId)) {
@@ -185,7 +190,7 @@ export default class TwitchStreamListener {
 				if(this.trustedBroadcasters.has(stream.userId)) {
 					this.liveTrustedBroadcasters.set(
 						stream.userId,
-						await this.listener.subscribeToChannelUpdateEvents(stream.userId, async event => await this.handleStreamUpdate(event))
+						this.listener.onChannelUpdate(stream.userId, async (event) => await this.handleStreamUpdate(event))
 					);
 				}
 				if(stream.title.match(/(?:bingo|fetchr)/i) && stream.gameId == '27471') {
@@ -202,11 +207,11 @@ export default class TwitchStreamListener {
 		}
 	}
 
-	private async handleStreamOffline(broadcasterId: string): Promise<void> {
+	private handleStreamOffline(broadcasterId: string) {
 		try {
 			this.eventEmitter.emit('broadcasterOffline', broadcasterId);
 			if(this.liveTrustedBroadcasters.has(broadcasterId)) {
-				await this.liveTrustedBroadcasters.get(broadcasterId)!.stop();
+				this.liveTrustedBroadcasters.get(broadcasterId)!.stop();
 				this.liveTrustedBroadcasters.delete(broadcasterId);
 			}
 		} catch (err) {
@@ -230,8 +235,10 @@ export default class TwitchStreamListener {
 	}
 
 	public async destroy(): Promise<void> {
-		if(this.isListening)
-			await this.listener.unlisten()
+		if(this.isListening) {
+			await this.client.eventSub.deleteAllSubscriptions();
+			this.listener.stop()
+		}
 	}
 
 	private async saveBroadcasters(): Promise<void> {

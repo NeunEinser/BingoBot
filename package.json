@@ -16,18 +16,18 @@
 		"url": "https://github.com/NeunEinser/BingoBot"
 	},
 	"dependencies": {
-		"@twurple/api": "^5.0.5",
-		"@twurple/eventsub": "^5.0.5",
-		"@twurple/eventsub-ngrok": "^5.0.5",
+		"@twurple/api": "^7.0.1",
+		"@twurple/eventsub-http": "^7.0.1",
+		"@twurple/eventsub-ngrok": "^7.0.1",
 		"config": "^3.3.6",
 		"discord.js": "^14.3.0",
 		"js-yaml": "^4.1.0",
-		"log4js": "^6.3.0",
-		"typescript": "^4.4.3"
+		"log4js": "^6.3.0"
 	},
 	"devDependencies": {
 		"@types/config": "^3.3.0",
-		"@types/node": "^16.11.12"
+		"@types/node": "^20.4.10",
+		"typescript": "^5.1.6"
 	},
 	"scripts": {
 		"start": "npm run build && node ./bin",

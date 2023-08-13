@@ -1,6 +1,6 @@
 import * as log4js from 'log4js';
 import { ApiClient } from "@twurple/api";
-import { ClientCredentialsAuthProvider } from '@twurple/auth';
+import { AppTokenAuthProvider } from '@twurple/auth';
 import { Client, IntentsBitField, NewsChannel, TextChannel } from "discord.js";
 import BotConfig from "./BotConfig";
 import CommandRegistry from "./CommandRegistry";
@@ -18,7 +18,7 @@ export default class BingoBot {
 		try {
 			await this.client.login(this.config.discordToken);
 			
-			const auth = new ClientCredentialsAuthProvider(this.config.twitch.clientId, this.config.twitch.clientSecret);
+			const auth = new AppTokenAuthProvider(this.config.twitch.clientId, this.config.twitch.clientSecret);
 			const twitchClient = new ApiClient({authProvider: auth, });
 
 			const announcementChannel = (await this.client.channels.fetch(this.config.announcementChannel)) as NewsChannel;
@@ -34,6 +34,7 @@ export default class BingoBot {
 					default: { appenders: [ 'out', 'file', 'discord' ], level: this.config.logLevel }
 				}
 			});
+			this.logger.info('Initializing bot');
 
 			this.twitchListener = new TwitchStreamListener(twitchClient);
 			
