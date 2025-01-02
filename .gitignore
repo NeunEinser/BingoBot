@@ -2,6 +2,7 @@ bin
 config/local.*
 certificate
 data/**
+database
 
 # Logs
 logs

@@ -3,22 +3,30 @@ import { readFileSync } from "fs";
 
 export default class BotConfig {
 	public readonly logLevel: 'all' | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'mark' | 'off';
-	public readonly announcementChannel: string;
+	public readonly twitchBingoStreamsChannel: string;
+	public readonly weeklySeedsChannel: string;
 	public readonly logChannel: string;
 	public readonly ownerGuild: string;
 	public readonly owner: string;
 	public readonly ssl?: SSLConfig;
 	public readonly discordToken: string;
 	public readonly twitch: TwitchConfig;
+	public readonly sqlitePath: string;
 
 	constructor() {
 		this.logLevel = config.get('logLevel');
-		this.announcementChannel = config.get('announcementChannel');
+		this.twitchBingoStreamsChannel = config.get('twitchBingoStreamsChannel');
+		this.weeklySeedsChannel = config.get('weeklySeedsChannel');
 		this.logChannel = config.get('logChannel');
 		this.ownerGuild = config.get('ownerGuild');
 		this.owner = config.get('owner');
 		this.discordToken = config.get('discordToken');
 		this.twitch = config.get('twitch');
+		if(config.has('sqlitePath')) {
+			this.sqlitePath = config.get('sqlitePath');
+		} else {
+			this.sqlitePath = ":memory:"
+		}
 
 		if(config.has('ssl')) {
 			const sslPaths = config.get<SSLConfig>('ssl');

@@ -2,6 +2,9 @@
 
 logLevel: 'info'
 logChannel: '901531018622812230'
-announcementChannel: '899755317343170630'
+twitchBingoStreamsChannel: '899755317343170630'
+weeklySeedsChannel: '899755317343170630'
 ownerGuild: '825494099560759357'
 owner: '137290216691073024'
+
+sqlitePath: ./database
