@@ -61,13 +61,13 @@ const DEFAULT_QUERY = `SELECT
 							OR (
 								x.points = score.points
 								AND x.time_in_millis NOT NULL 
-								AND (score.time_in_millis ISNULL OR x.time_in_millis > score.time_in_millis)
+								AND (score.time_in_millis ISNULL OR x.time_in_millis < score.time_in_millis)
 							)
 						)
 					)
 					OR (
 						seed.game_type != 6
-						AND x.time_in_millis > score.time_in_millis
+						AND x.time_in_millis < score.time_in_millis
 					)
 				)
 		)
@@ -132,7 +132,7 @@ export default class ScoreRepository {
 		`);
 		this.getPlayerScoresBySeedQuery = db.prepare(`${DEFAULT_QUERY}
 			WHERE seed.id = ? AND player.in_game_name NOT NULL
-			ORDER BY score.points, score.time_in_millis
+			ORDER BY score.points DESC, score.time_in_millis
 			LIMIT ?
 		`);
 		this.createOrUpdatePlayerScoreQuery = db.prepare(`INSERT OR REPLACE
