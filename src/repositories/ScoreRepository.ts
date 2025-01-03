@@ -132,7 +132,7 @@ export default class ScoreRepository {
 		`);
 		this.getPlayerScoresBySeedQuery = db.prepare(`${DEFAULT_QUERY}
 			WHERE seed.id = ? AND player.in_game_name NOT NULL
-			ORDER BY rank
+			ORDER BY score.points, score.time_in_millis
 			LIMIT ?
 		`);
 		this.createOrUpdatePlayerScoreQuery = db.prepare(`INSERT OR REPLACE
