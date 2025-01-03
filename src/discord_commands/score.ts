@@ -138,10 +138,10 @@ export default class ScoreCommand implements Command {
 					time_in_millis *= 1000;
 					let partial = partial_split.length === 2 ? parseInt(partial_split[1]) : 0;
 					if (partial !== 0) {
-						if (partial_split[1].length < 10) {
+						if (partial < 10) {
 							partial *= 10
 						}
-						if (partial_split[1].length < 100) {
+						if (partial < 100) {
 							partial *= 10
 						}
 					}
@@ -176,7 +176,7 @@ export default class ScoreCommand implements Command {
 					return;
 				}
 
-				const seed = this.context.db.seeds.getSeedBySeedNumberAndWeek(interaction.options.getInteger('seed', true), week.id)
+				const seed = this.context.db.seeds.getSeed(interaction.options.getInteger('seed_id', true))
 				if (!seed) {
 					await interaction.reply('Seed is not part of the current week and cannot be removed anymore.');
 					return;

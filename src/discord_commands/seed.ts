@@ -123,9 +123,9 @@ export default class SeedCommand implements Command {
 					const seedPayload = await updateMessageForSeed(seed, this.context, this.config);
 					const seedMessage = await channel.send(seedPayload);
 					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
-					if (seedMessage.crosspostable) {
-						await seedMessage.crosspost();
-					}
+					// if (seedMessage.crosspostable) {
+					// 	await seedMessage.crosspost();
+					// }
 				}
 				break;
 			}

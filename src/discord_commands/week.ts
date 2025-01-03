@@ -122,9 +122,9 @@ export default class WeekCommand implements Command {
 					const seedPayload = await updateMessageForSeed(seed, this.context, this.config);
 					const seedMessage = await channel.send(seedPayload);
 					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
-					if (seedMessage.crosspostable) {
-						await seedMessage.crosspost();
-					}
+					// if (seedMessage.crosspostable) {
+					// 	await seedMessage.crosspost();
+					// }
 				}
 				await interaction.editReply("Successfully published week.");
 				break;
@@ -150,9 +150,9 @@ export default class WeekCommand implements Command {
 					if (!seed.discord_message_id) {
 						const seedMessage = await channel.send(seedPayload);
 						this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
-						if (seedMessage.crosspostable) {
-							await seedMessage.crosspost();
-						}
+						// if (seedMessage.crosspostable) {
+						// 	await seedMessage.crosspost();
+						// }
 					}
 				}
 

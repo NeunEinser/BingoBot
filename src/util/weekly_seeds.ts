@@ -47,7 +47,7 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 		message += '\n';
 	}
 
-	message += `\nhttp://www.playminecraftbingo.com/fetchr-weekly-seeds/${week.week}\n\n`
+	message += `\nhttp://www.playminecraftbingo.com/fetchr-weekly-seeds/${week.week}\n\n-# Use /score to submit your scores!\n\n`
 
 	if (!week.published_on && !week.discord_message_id) {
 		for (let seed of seeds) {
@@ -58,7 +58,7 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 	}
 
 	const messageOptions: BaseMessageOptionsWithPoll = {
-		content: message.trim(),
+		content: message.trim().substring(0, 2000),
 	};
 
 	if (week.discord_message_id) {
@@ -160,27 +160,27 @@ function millisToTimeStamp(millis: number) {
 	if (cur % 100 !== 0) {
 		result = '.' + cur % 100;
 	}
-	cur = Math.floor(cur / 100);
+	cur -= cur % 100;
+	cur /= 100;
 
 	result = (cur % 60) + result;
-	if (cur > 60) {
+	if (cur >= 60) {
 		if (cur % 60 < 10) {
 			result = '0' + result;
 		}
 		result = ':' + result;
 	}
-	cur = Math.floor(cur / 60);
+	cur -= cur % 60;
+	cur /= 60;
 	if (cur > 0) {
 		result = (cur % 60) + result;
-		if (cur > 60) {
+		if (cur >= 60) {
 			if (cur % 60 < 10) {
 				result = '0' + result;
 			}
 			result = ':' + result;
-		}
-		cur = Math.floor(cur / 60);
-
-		if (cur > 0) {
+			cur -= cur % 60;
+			cur /= 60;
 			result = cur + result;
 		}
 	}

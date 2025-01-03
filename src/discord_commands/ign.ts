@@ -20,7 +20,7 @@ export default class IgnCommand implements Command {
 		)
 
 	async execute(interaction: ChatInputCommandInteraction) {
-		const ign = interaction.options.getString('name', true);
+		const ign = interaction.options.getString('ign', true);
 		await this.handle(interaction, ign);
 	}
 
