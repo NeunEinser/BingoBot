@@ -34,15 +34,18 @@ export default class BingoBot {
 
 			const announcementChannel = (await this.client.channels.fetch(this.config.twitchBingoStreamsChannel)) as NewsChannel;
 			const logChannel = (await this.client.channels.fetch(this.config.logChannel)) as TextChannel;
+			const errorLogChannel = (await this.client.channels.fetch(this.config.errorLogChannel)) as TextChannel;
 			
 			log4js.configure({
 				appenders: {
 					out: { type: 'stdout' },
 					file: { type: 'file', filename: `logs/${new Date().toISOString().replace(/[:.]/g, '_')}.log` },
-					discord: { type: 'DiscordAppender', getChannel: () => logChannel }
+					discord: { type: 'DiscordAppender', getChannel: () => logChannel },
+					discord_err: { type: 'DiscordAppender', getChannel: () => errorLogChannel },
+					discord_err_filter: { type: 'logLevelFilter', level: 'warn', appender: 'discord_err' },
 				},
 				categories: {
-					default: { appenders: [ 'out', 'file', 'discord' ], level: this.config.logLevel }
+					default: { appenders: [ 'out', 'file', 'discord', 'discord_err_filter' ], level: this.config.logLevel },
 				}
 			});
 			this.logger.info('Initializing bot');

@@ -6,6 +6,7 @@ export default class BotConfig {
 	public readonly twitchBingoStreamsChannel: string;
 	public readonly weeklySeedsChannel: string;
 	public readonly logChannel: string;
+	public readonly errorLogChannel: string;
 	public readonly ownerGuild: string;
 	public readonly owner: string;
 	public readonly ssl?: SSLConfig;
@@ -18,6 +19,7 @@ export default class BotConfig {
 		this.twitchBingoStreamsChannel = config.get('twitchBingoStreamsChannel');
 		this.weeklySeedsChannel = config.get('weeklySeedsChannel');
 		this.logChannel = config.get('logChannel');
+		this.errorLogChannel = config.get('errorLogChannel');
 		this.ownerGuild = config.get('ownerGuild');
 		this.owner = config.get('owner');
 		this.discordToken = config.get('discordToken');

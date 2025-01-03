@@ -2,6 +2,7 @@
 
 logLevel: 'info'
 logChannel: '901531018622812230'
+errorLogChannel: '1324773658476023889'
 twitchBingoStreamsChannel: '899755317343170630'
 weeklySeedsChannel: '899755317343170630'
 ownerGuild: '825494099560759357'
