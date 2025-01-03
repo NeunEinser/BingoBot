@@ -43,6 +43,7 @@ export interface Week {
 
 export default class WeekRepository {
 	private readonly getCurrentWeekQuery: StatementSync;
+	private readonly getNextWeekNumberQuery: StatementSync;
 	private readonly getWeekByWeekNumberQuery: StatementSync;
 	private readonly getUnpublishedFilteredWeeksQuery: StatementSync;
 	private readonly getFilteredWeeksQuery: StatementSync;
@@ -56,6 +57,13 @@ export default class WeekRepository {
 			WHERE published_on_unix_millis NOT NULL
 				AND discord_message_id NOT NULL
 			ORDER BY published_on_unix_millis DESC
+			LIMIT 1
+		`);
+		this.getNextWeekNumberQuery = db.prepare(`SELECT week + 1 value FROM weeks
+			ORDER BY
+				CASE WHEN published_on_unix_millis IS NULL THEN 0 ELSE 1 END,
+				published_on_unix_millis DESC,
+				week
 			LIMIT 1
 		`);
 		this.getWeekByWeekNumberQuery = db.prepare(`${DEFAULT_QUERY}
@@ -73,7 +81,7 @@ export default class WeekRepository {
 			LIMIT ?
 		`);
 		this.getFilteredWeeksQuery = db.prepare(`${DEFAULT_QUERY}
-			WHERE week.week LIKE ? || '%'
+			WHERE week.week LIKE '%' || ? || '%'
 			ORDER BY
 				CASE WHEN published_on_unix_millis IS NULL THEN 0 ELSE 1 END,
 				published_on_unix_millis DESC
@@ -87,7 +95,7 @@ export default class WeekRepository {
 			UPDATE weeks SET
 				published_on_unix_millis = ?,
 				discord_message_id = ?
-			WHERE week = ? AND published_on_unix_millis ISNULL AND discord_message_id ISNULL
+			WHERE id = ? AND published_on_unix_millis ISNULL AND discord_message_id ISNULL
 		`);
 	}
 
@@ -100,6 +108,15 @@ export default class WeekRepository {
 		return null;
 	}
 
+	public getNextWeekNumber() {
+		const result = this.getNextWeekNumberQuery.all() as {value: number}[];
+		if (result.length > 0) {
+			return result[0].value;
+		}
+
+		return 1;
+	}
+
 	public getWeekByWeekNumber(week: number) {
 		const result = this.getWeekByWeekNumberQuery.all(week) as RawWeek[];
 		if (result.length > 0) {
@@ -109,8 +126,8 @@ export default class WeekRepository {
 		return null;
 	}
 
-	public getUnpublishedFilteredWeeks(weekStart: string, maxResults: number) {
-		const result = this.getUnpublishedFilteredWeeksQuery.all(weekStart, maxResults) as RawWeek[];
+	public getUnpublishedFilteredWeeks(weekFilter: string, maxResults: number) {
+		const result = this.getUnpublishedFilteredWeeksQuery.all(weekFilter, maxResults) as RawWeek[];
 		return result.map(r => WeekRepository.decodeRawWeek(r));
 	}
 
@@ -129,18 +146,8 @@ export default class WeekRepository {
 		this.createWeekQuery.run(weekNumber, version_id, mc_version_id, max_version_id, max_mc_version_id, description ?? null);
 	}
 
-	public publishWeek(weekNumber: number, discord_message_id: string) {
-		const weeks = this.getWeekByWeekNumberQuery.all(weekNumber) as RawWeek[];
-		
-		if (weeks.length < 0) {
-			throw new Error("Week does not exist");
-		}
-		
-		if (weeks[0].published_on_unix_millis) {
-			throw new Error("Week already published");
-		}
-
-		this.publishWeekQuery.run(Date.now(), discord_message_id, weekNumber)
+	public publishWeek(week_id: number, discord_message_id: string) {
+		this.publishWeekQuery.run(Date.now(), discord_message_id, week_id);
 	}
 
 	public static decodeRawWeek(raw: RawWeek): Week {

@@ -1,6 +1,9 @@
 import { ActionRowBuilder, AutocompleteInteraction, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { Command } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
+import { GAME_TYPES } from "../repositories/SeedRepository";
+import BotConfig from "../BotConfig";
+import { constructDiscordMessageAndUpdateIfExists, updateMessageForSeed } from "../util/weekly_seeds";
 
 const SEED_TYPES = [
 	'bingo',
@@ -10,11 +13,10 @@ const SEED_TYPES = [
 	'triple_bingo',
 	'quadruple_bingo',
 	'points_in_25_minutes',
-	'practiced_bingo_or_blackout'
 ];
 
 export default class SeedCommand implements Command {
-	constructor(private readonly context: BotContext) {}
+	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
 
 	public static readonly data = new SlashCommandBuilder()
 		.setName('seed')
@@ -48,6 +50,11 @@ export default class SeedCommand implements Command {
 				)
 				.setRequired(true)
 			)
+			.addBooleanOption(practiced => practiced
+				.setName("practiced")
+				.setDescription("Whether this is a practiced seed.")
+				.setRequired(false)
+			)
 			.addStringOption(desc => desc
 				.setName("description")
 				.setDescription("Additional text for the seed, e.g. Practice Seed Credits")
@@ -59,7 +66,7 @@ export default class SeedCommand implements Command {
 			.setDescription("Remove a seed. This will permanentley delete any submitted scores, too!")
 			.addIntegerOption(seed => seed
 				.setName("seed_id")
-				.setDescription("The numeric Fetchr seed")
+				.setDescription("The internal id of the seed. Use autocomplete.")
 				.setAutocomplete(true)
 				.setRequired(true)
 			)
@@ -73,28 +80,52 @@ export default class SeedCommand implements Command {
 					await interaction.reply("Could not find week!")
 					return;
 				}
+				
+				const seedNumber = interaction.options.getInteger("seed", true);
 
-				const seed = interaction.options.getInteger("seed", true);
 				const type = interaction.options.getString("type", true);
-				if (type !== 'practiced_bingo_or_blackout') {
-					if (!seed.toString().startsWith(week.week.toString())) {
+				const game_type = GAME_TYPES[SEED_TYPES.indexOf(type)];
+				const existing = this.context.db.seeds.getSeedBySeedNumberAndWeek(seedNumber, week.id);
+				if (existing && (!existing.practiced || existing.game_type === game_type)) {
+					await interaction.reply("Seed with same seed number already exists for this week.")
+					return;
+				}
+				const practiced = interaction.options.getBoolean("practiced") ?? false;
+				if (!practiced) {
+					if (!seedNumber.toString().startsWith(week.week.toString())) {
 						await interaction.reply(`**Warning:** Expected seed to start with week number ${week.week}.`);
-					} else if (seed.toString().length !== week.week.toString().length + 3) {
-						await interaction.reply(`**Warning:** Expected seed to have exactly three digits after the week number, but found ${seed.toString().length - week.week.toString().length}.`);
+					} else if (seedNumber.toString().length !== week.week.toString().length + 3) {
+						await interaction.reply(`**Warning:** Expected seed to have exactly three digits after the week number, but found ${seedNumber.toString().length - week.week.toString().length}.`);
 					}
 				}
 				this.context.db.seeds.createSeed(
 					week.id,
-					seed,
-					SEED_TYPES.indexOf(type),
+					seedNumber,
+					game_type,
+					practiced,
 					type == 'points_in_25_minutes' ? 25 : type === 'practiced_bingo_or_blackout' ? '[0, 1]' : null,
 					interaction.options.getString("description"),
 				)
+				const seed = this.context.db.seeds.getSeed(this.context.db.getLastInsertRowId())!
 
 				if (!interaction.replied) {
 					await interaction.reply('Created seed successfully.');
 				} else {
 					await interaction.followUp('Created seed successfully.');
+				}
+
+				if (week.discord_message_id) {
+					const channel = await interaction.guild?.channels.fetch(this.config.weeklySeedsChannel);
+					if (!channel?.isTextBased()) {
+						await interaction.reply('Could not get configured weekly seeds channel as text channel.');
+						return;
+					}
+					const seedPayload = await updateMessageForSeed(seed, this.context, this.config);
+					const seedMessage = await channel.send(seedPayload);
+					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
+					if (seedMessage.crosspostable) {
+						await seedMessage.crosspost();
+					}
 				}
 				break;
 			}
@@ -114,9 +145,9 @@ export default class SeedCommand implements Command {
 						.setStyle(ButtonStyle.Danger);
 
 					const cancelBtn = new ButtonBuilder()
-					.setCustomId('cancel')
-					.setLabel('Cancel')
-					.setStyle(ButtonStyle.Secondary)
+						.setCustomId('cancel')
+						.setLabel('Cancel')
+						.setStyle(ButtonStyle.Secondary);
 
 					const btnRow = new ActionRowBuilder<ButtonBuilder>()
 						.setComponents(cancelBtn, deleteBtn);
@@ -138,11 +169,20 @@ export default class SeedCommand implements Command {
 							await user_reply.followUp('Deletion has been cancelled by user');
 							return;
 						} else {
+							try {
+								const channel = await this.context.discordClient.channels.fetch(this.config.weeklySeedsChannel);
+								if (channel?.isTextBased()) {
+									await channel.messages.delete(seed.discord_message_id!);
+								}
+							} catch {}
 							this.context.db.seeds.deleteSeed(seed.id);
 							await user_reply.followUp('Deleted seed and submitted scores successfully.');
+							await constructDiscordMessageAndUpdateIfExists(seed.week, this.context, this.config);
+							
 						}
 					} catch {
-						await interaction.editReply({content: 'Confirmation not recieved within a minute, cancelling', components: [] });
+						await interaction.editReply({components: [] });
+						await interaction.followUp('Confirmation not recieved within a minute, cancelling');
 						return;
 					}
 				} else {
@@ -168,7 +208,9 @@ export default class SeedCommand implements Command {
 						name: `${s.seed} (id: ${s.id}) (${s.week.published_on
 							? 'published on: ' + s.week.published_on.toISOString().split('T')[0]
 							: 'not published'
-						})`,
+						})${
+							s.practiced ? ` (${s.game_type.replace('_', '-')})` : ''
+						}`,
 						value: s.id
 					}));
 			}

@@ -1,8 +1,9 @@
-import { AutocompleteInteraction, BaseMessageOptionsWithPoll, ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
+import { AutocompleteInteraction, ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { Command } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import SemVer from "../util/SemVer";
 import BotConfig from "../BotConfig";
+import { constructDiscordMessageAndUpdateIfExists, updateMessageForSeed } from "../util/weekly_seeds";
 
 export default class WeekCommand implements Command {
 	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
@@ -81,42 +82,81 @@ export default class WeekCommand implements Command {
 				break;
 			}
 			case 'preview': {
-				const msg = this.constructDiscordMessage(interaction.options.getInteger('week', true));
-				if (msg === null) {
-					await interaction.reply('Could not find week.');
-					return
-				}
-
-				await interaction.reply(msg);
-				break;
-			}
-			case 'publish': {
-				const weekNumber = interaction.options.getInteger('week', true);
-				const week = this.context.db.weeks.getWeekByWeekNumber(weekNumber);
+				const week = this.context.db.weeks.getWeekByWeekNumber(interaction.options.getInteger('week', true));
 				if (!week) {
 					await interaction.reply('Could not find week.');
 					return;
 				}
+				const msg = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
+				await interaction.reply(msg);
+				break;
+			}
+			case 'publish': {
+				await interaction.deferReply();
+				const weekNumber = interaction.options.getInteger('week', true);
+				const week = this.context.db.weeks.getWeekByWeekNumber(weekNumber);
+				if (!week) {
+					await interaction.editReply('Could not find week.');
+					return;
+				}
 				if (week.published_on || week.discord_message_id) {
-					await interaction.reply('Week is already published.');
+					await interaction.editReply('Week is already published.');
 					return;
 				}
-				const payload = this.constructDiscordMessage(weekNumber);
-				if (!payload) {
-					await interaction.reply('Could not create message payload.');
-					return;
-				}
+				week.published_on = new Date();
+				const payload = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
 
 				const channel = await interaction.guild?.channels.fetch(this.config.weeklySeedsChannel);
 				if (!channel?.isTextBased()) {
-					await interaction.reply('Could not get configured weekly seeds channel as text channel.');
+					await interaction.editReply('Could not get configured weekly seeds channel as text channel.');
 					return;
 				}
 				const message = await channel.send(payload);
-				this.context.db.weeks.publishWeek(weekNumber, message.id);
+				this.context.db.weeks.publishWeek(week.id, message.id);
 				if (message.crosspostable) {
 					await message.crosspost();
 				}
+				const seeds = this.context.db.seeds.getSeedsByWeekId(week.id);
+
+				for (let seed of seeds) {
+					const seedPayload = await updateMessageForSeed(seed, this.context, this.config);
+					const seedMessage = await channel.send(seedPayload);
+					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
+					if (seedMessage.crosspostable) {
+						await seedMessage.crosspost();
+					}
+				}
+				await interaction.editReply("Successfully published week.");
+				break;
+			}
+			case 'refresh': {
+				await interaction.deferReply();
+				const week = this.context.db.weeks.getCurrentWeek();
+				if (!week) {
+					await interaction.editReply("No week has been published yet.")
+					return;
+				}
+
+				await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
+				const seeds = this.context.db.seeds.getSeedsByWeekId(week.id);
+
+				const channel = await interaction.guild?.channels.fetch(this.config.weeklySeedsChannel);
+				if (!channel?.isTextBased()) {
+					await interaction.editReply('Could not get configured weekly seeds channel as text channel.');
+					return;
+				}
+				for (let seed of seeds) {
+					const seedPayload = await updateMessageForSeed(seed, this.context, this.config);
+					if (!seed.discord_message_id) {
+						const seedMessage = await channel.send(seedPayload);
+						this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
+						if (seedMessage.crosspostable) {
+							await seedMessage.crosspost();
+						}
+					}
+				}
+
+				await interaction.editReply("Successfully refreshed current week.");
 				break;
 			}
 		}
@@ -127,8 +167,7 @@ export default class WeekCommand implements Command {
 		switch (focused.name) {
 			case 'week': {
 				if (interaction.options.getSubcommand() == "add") {
-					const currentWeek = this.context.db.weeks.getCurrentWeek();
-					const nextNumber = (currentWeek?.week ?? 0) + 1;
+					const nextNumber = this.context.db.weeks.getNextWeekNumber();
 
 					if (nextNumber.toString().startsWith(focused.value)) {
 						return [{ name: nextNumber.toString(), value: nextNumber }]
@@ -184,9 +223,9 @@ export default class WeekCommand implements Command {
 		let max_version: SemVer | undefined = undefined;
 		let max_mc_version: SemVer | undefined = undefined;
 	
-		const existing = this.context.db.weeks.getUnpublishedFilteredWeeks(week.toString(), 100);
-		if (existing.some(w => w.week === week)) {
-			await interaction.reply('Unpublished week with same week number already exists.'
+		const existing = this.context.db.weeks.getWeekByWeekNumber(week);
+		if (existing && (!existing.published_on || !existing.discord_message_id)) {
+			await interaction.reply('Unpublished week with same week number already exists. '
 				+ 'Only one week with a specific number can exist while unpublished to avoid ambuigity in other commands.');
 			return;
 		}
@@ -224,53 +263,7 @@ export default class WeekCommand implements Command {
 		}
 	
 		this.context.db.weeks.createWeek(week, version, mc_version, max_version, max_mc_version, desc);
-	}
-
-	private constructDiscordMessage(weekNumber: number): BaseMessageOptionsWithPoll | null {
-		const week = this.context.db.weeks.getWeekByWeekNumber(weekNumber);
-		if (!week) {
-			return null;
-		}
-
-		const fetchrVersionStr = week.version.toString() + (week.max_version ? '-' + week.max_version.toString() : '');
-		const mcVersionStr = week.mc_version.toString() + (week.max_mc_version ? '-' + week.max_mc_version.toString() : '');
-		const seeds = this.context.db.seeds.getSeedsByWeekId(week.id);
-		const publishedOn = week.published_on ?? new Date();
-		const toFri = (publishedOn.getDay() + 2) % 7;
-		const date = new Date(publishedOn);
-		date.setDate(date.getDate() - toFri);
-
-		let message = '';
-		if (week.description) {
-			message += week.description + '\n\n';
-		}
-		message += `Fetchr ${fetchrVersionStr} (MC ${mcVersionStr}) seeds for ${date.toLocaleDateString('en-us', { month: 'long', day: 'numeric', year: 'numeric' })}:\n\n`;
-		
-		for (let seed of seeds) {
-			message += 'weekly '
-			switch (seed.game_type) {
-				case 0: message += 'blind bingo'; break;
-				case 1: message += 'blind blackout'; break;
-				case 2: message += 'blind 20-no-bingo'; break;
-				case 3: message += 'blind double-bingo'; break;
-				case 4: message += 'blind triple-bingo'; break;
-				case 5: message += 'blind quadruple-bingo'; break;
-				case 6: message += `blind points-in-${seed.game_type_specific}-mins`; break;
-				case 7: message += 'practiced'; break;
-			}
-
-			message += ` seed: ${seed.seed}`
-			if (seed.description) {
-				message += ` (${seed.description})`;
-			}
-			message += '\n';
-		}
-
-		message += `\nhttp://www.playminecraftbingo.com/fetchr-weekly-seeds/${week.week}`
-
-		return {
-			content: message,
-		};
+		await interaction.reply("Successfully created week.");
 	}
 }
 

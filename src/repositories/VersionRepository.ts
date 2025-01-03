@@ -8,6 +8,7 @@ export default class VersionRepository {
 	private readonly getMinecraftVersionIdBySemVerQuery: StatementSync;
 	private readonly getFilteredMinecraftVersionsQuery: StatementSync;
 	private readonly insertMinecraftVersionQuery: StatementSync;
+	private readonly getLastInsertedRowIdQuery: StatementSync;
 
 	constructor(private readonly db: DatabaseSync) {
 		this.getVersionIdBySemVerQuery = db.prepare(`
@@ -27,8 +28,6 @@ export default class VersionRepository {
 		this.insertVersionQuery = db.prepare(`
 			INSERT INTO versions(major, minor, patch)
 			VALUES (?, ?, ?);
-
-			SELECT last_insert_rowid() id;
 		`)
 		this.getMinecraftVersionIdBySemVerQuery = db.prepare(`
 			SELECT id
@@ -47,9 +46,8 @@ export default class VersionRepository {
 		this.insertMinecraftVersionQuery = db.prepare(`
 			INSERT INTO minecraft_versions(major, minor, patch)
 			VALUES (?, ?, ?);
-
-			SELECT last_insert_rowid() id;
 		`)
+		this.getLastInsertedRowIdQuery = db.prepare('SELECT last_insert_rowid() rowid');
 	}
 
 	public getOrCreateVersionIdBySemVer(version: SemVer) {
@@ -58,7 +56,8 @@ export default class VersionRepository {
 			return result[0].id
 		}
 
-		return this.createVersion(version);
+		this.createVersion(version);
+		return (this.getLastInsertedRowIdQuery.all() as {rowid:number}[])[0].rowid;
 	}
 
 	public getOrCreateMinecraftVersionIdBySemVer(version: SemVer) {
@@ -67,7 +66,8 @@ export default class VersionRepository {
 			return result[0].id
 		}
 
-		return this.createMinecraftVersion(version);
+		this.createMinecraftVersion(version);
+		return (this.getLastInsertedRowIdQuery.all() as {rowid:number}[])[0].rowid;
 	}
 
 	public getFilteredVersions(firstStart: string, secondStart: string, thirdStart: string, limit: number) {
@@ -91,10 +91,10 @@ export default class VersionRepository {
 	}
 
 	public createVersion(version: SemVer) {
-		return (this.insertVersionQuery.all(version.major, version.minor, version.patch)[0] as {id: number}).id;
+		this.insertVersionQuery.run(version.major, version.minor, version.patch);
 	}
 
 	public createMinecraftVersion(version: SemVer) {
-		return (this.insertMinecraftVersionQuery.all(version.major, version.minor, version.patch)[0] as {id: number}).id;
+		this.insertMinecraftVersionQuery.run(version.major, version.minor, version.patch);
 	}
 }

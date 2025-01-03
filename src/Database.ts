@@ -1,24 +1,30 @@
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, StatementSync } from "node:sqlite";
 import WeekRepository from "./repositories/WeekRepository";
 import VersionRepository from "./repositories/VersionRepository";
 import SeedRepository from "./repositories/SeedRepository";
+import ScoreRepository from "./repositories/ScoreRepository";
+import PlayerRepository from "./repositories/PlayerRepository";
 
 export default class Database {
 	public readonly versions: VersionRepository;
 	public readonly weeks: WeekRepository;
 	public readonly seeds: SeedRepository;
+	public readonly scores: ScoreRepository;
+	public readonly players: PlayerRepository;
+
+	private readonly getLastInsertedRowIdQuery: StatementSync;
 
 	public constructor(private readonly db: DatabaseSync) {
 		db.exec(`
 			PRAGMA foreign_keys = true;
 
 			CREATE TABLE IF NOT EXISTS versions(
-				id INTEGER PRIMARY KEY,
+				id INTEGER NOT NULL PRIMARY KEY,
 				major INTEGER NOT NULL CHECK (major >= 0),
 				minor INTEGER NOT NULL CHECK (minor >= 0),
 				patch INTEGER NOT NULL CHECK (patch >= 0),
 
-				CONSTRAINT AK__versions__major__minor__patch UNIQUE (major, minor, patch)
+				UNIQUE (major, minor, patch)
 			);
 
 			INSERT OR IGNORE INTO versions (major, minor, patch)
@@ -32,12 +38,12 @@ export default class Database {
 				(5, 2, 0);
 
 			CREATE TABLE IF NOT EXISTS minecraft_versions(
-				id INTEGER PRIMARY KEY,
+				id INTEGER NOT NULL PRIMARY KEY,
 				major INTEGER NOT NULL CHECK (major >= 0),
 				minor INTEGER NOT NULL CHECK (minor >= 0),
 				patch INTEGER NOT NULL CHECK (patch >= 0),
 
-				CONSTRAINT AK__minecraft_versions__major__minor__patch UNIQUE (major, minor, patch)
+				UNIQUE (major, minor, patch)
 			);
 
 			INSERT OR IGNORE INTO minecraft_versions (major, minor, patch)
@@ -57,7 +63,7 @@ export default class Database {
 				(1, 21, 4);
 
 			CREATE TABLE IF NOT EXISTS weeks(
-				id INTEGER PRIMARY KEY,
+				id INTEGER NOT NULL PRIMARY KEY,
 				week INTEGER NOT NULL,
 				version_id INTEGER NOT NULL REFERENCES versions(id) ON DELETE RESTRICT ON UPDATE CASCADE,
 				minecraft_version_id INTEGER NOT NULL REFERENCES minecraft_versions ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -67,38 +73,54 @@ export default class Database {
 				published_on_unix_millis INTEGER,
 				discord_message_id TEXT,
 
-				CONSTRAINT AK__weeks__week__version_id UNIQUE (week, version_id)
+				UNIQUE (week, version_id)
 			);
 
 			CREATE TABLE IF NOT EXISTS seeds(
-				id INTEGER PRIMARY KEY,
+				id INTEGER NOT NULL PRIMARY KEY,
 				week_id INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE ON UPDATE CASCADE,
 				seed INTEGER NOT NULL,
-				game_type INTEGER NOT NULL CHECK (game_type BETWEEN 0 AND 7),
+				practiced INTEGER NOT NULL DEFAULT 0 CHECK (practiced BETWEEN 0 AND 1),
+				game_type INTEGER NOT NULL CHECK (game_type BETWEEN 0 AND 6),
 				game_type_specific,
 				description TEXT,
+				discord_message_id TEXT,
 
-				CONSTRAINT AK__seeds__week_id__seed UNIQUE (week_id, seed)
+				UNIQUE (week_id, seed, game_type)
 			);
 			
 			CREATE TABLE IF NOT EXISTS players(
-				id INTEGER PRIMARY KEY,
-				in_game_name TEXT NOT NULL,
-				discord_id TEXT
+				id INTEGER NOT NULL PRIMARY KEY,
+				in_game_name TEXT UNIQUE,
+				discord_id TEXT UNIQUE
 			);
 
 			CREATE TABLE IF NOT EXISTS player_scores(
 				seed_id INTEGER NOT NULL REFERENCES seeds(id) ON DELETE CASCADE ON UPDATE CASCADE,
 				player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE ON UPDATE CASCADE,
-				time_in_millis INTEGER NOT NULL,
-				url_type INTEGER NOT NULL CHECK (url_type BETWEEN 0 AND 1),
-				url TEXT
+				points INTEGER,
+				time_in_millis INTEGER,
+				url_type INTEGER CHECK (url_type ISNULL OR url_type BETWEEN 0 AND 1),
+				url TEXT,
+
+				PRIMARY KEY (seed_id, player_id)
 			);
 		`)
 
 		this.versions = new VersionRepository(db);
 		this.weeks = new WeekRepository(db, this.versions);
 		this.seeds = new SeedRepository(db);
+		this.scores = new ScoreRepository(db);
+		this.players = new PlayerRepository(db);
+		this.getLastInsertedRowIdQuery = db.prepare('SELECT last_insert_rowid() rowid');
+	}
+
+	public getLastInsertRowId() {
+		const result = this.getLastInsertedRowIdQuery.all() as { rowid: number }[];
+		if (result.length === 0) {
+			return 0;
+		}
+		return result[0].rowid;
 	}
 
 	public close() {

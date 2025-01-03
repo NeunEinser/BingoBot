@@ -8,6 +8,8 @@ import WeekCommand from './discord_commands/week';
 import SeedCommand from './discord_commands/seed';
 import ScoreCommand from './discord_commands/score';
 import BotConfig from './BotConfig';
+import IgnCommand from './discord_commands/ign';
+import RestartCommand from './discord_commands/restart';
 
 export interface Command {
 	execute: (interaction: ChatInputCommandInteraction) => Promise<void>,
@@ -24,10 +26,12 @@ export default class CommandRegistry {
 			ping: { data: PingCommand.data, command: new PingCommand() },
 			intro: { data: IntroCommand.data, command: new IntroCommand() },
 			shutdown: { data: ShutdownCommand.data, command: new ShutdownCommand() },
+			restart: { data: RestartCommand.data, command: new RestartCommand() },
 			streamer: { data: StreamerCommand.data, command: new StreamerCommand(this.context) },
 			week: { data: WeekCommand.data, command: new WeekCommand(this.context, this.config) },
-			seed: { data: SeedCommand.data, command: new SeedCommand(this.context) },
-			score: { data: ScoreCommand.data, command: new ScoreCommand(this.context) },
+			seed: { data: SeedCommand.data, command: new SeedCommand(this.context, this.config) },
+			ign: { data: IgnCommand.data, command: new IgnCommand(this.context, this.config) },
+			score: { data: ScoreCommand.data, command: new ScoreCommand(this.context, this.config) },
 		}
 
 		await commandApi.set(Object.values(commandDefs).map(d => d.data.toJSON()));
@@ -51,8 +55,7 @@ export default class CommandRegistry {
 					} else {
 						BingoBot.logger.warn(`Command ${interaction.commandName} does not have an autocomplete script defined.`);
 					}
-				}
-				else if (interaction.isChatInputCommand()) {
+				} else if (interaction.isChatInputCommand()) {
 					BingoBot.logger.info(`Received command ${interaction.commandName}\n${JSON.stringify(interaction.options.data)}`);
 					
 					const command = commandDefs[interaction.commandName]?.command;
@@ -69,6 +72,10 @@ export default class CommandRegistry {
 							interaction.reply({ content: 'Command executed successfully!', flags: MessageFlags.Ephemeral })
 						}
 					}
+				} else if (interaction.isModalSubmit()) {
+					// TODO make nice
+					if (interaction.customId === 'ign')
+						await (commandDefs['ign'].command as IgnCommand).handleModalResponse(interaction);
 				}
 			} catch (err) {
 				try {
