@@ -1,4 +1,4 @@
-import { ActionRowBuilder, AutocompleteInteraction, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
+import { ActionRowBuilder, AutocompleteInteraction, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, InteractionContextType, Message, SlashCommandBuilder } from "discord.js";
 import { Command } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import { GAME_TYPES } from "../repositories/SeedRepository";
@@ -131,14 +131,24 @@ export default class SeedCommand implements Command {
 			}
 
 			case 'remove': {
-				const seed = this.context.db.seeds.getSeed(interaction.options.getInteger('seed_id', true));
+				const seed = await this.context.db.executeInTransaction(async () => {
+					const seed = this.context.db.seeds.getSeed(interaction.options.getInteger('seed_id', true));
 
-				if (!seed) {
-					await interaction.reply('Could not find seed.')
-					return;
-				}
+					if (!seed) {
+						await interaction.reply('Could not find seed.')
+						return null;
+					}
 
-				if (seed.week.published_on) {
+					if (!seed.week.published_on && !seed.week.discord_message_id) {
+						this.context.db.seeds.deleteSeed(seed.id);
+						await interaction.reply('Deleted unpublished seed successfully.');
+						return null;
+					}
+
+					return seed;
+				})
+
+				if (seed) {
 					const deleteBtn = new ButtonBuilder()
 						.setCustomId('delete')
 						.setLabel('Delete')
@@ -154,7 +164,7 @@ export default class SeedCommand implements Command {
 
 					const response = await interaction.reply({
 						content: `This seed has already been published on ${
-								seed.week.published_on.toLocaleDateString('en-us', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long'})
+								seed.week.published_on?.toLocaleDateString('en-us', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long'})
 							}. Are you sure you want to delete this seed?
 							
 							**This will also permanently delete all submitted scores!**`,
@@ -169,15 +179,25 @@ export default class SeedCommand implements Command {
 							await user_reply.followUp('Deletion has been cancelled by user');
 							return;
 						} else {
-							try {
-								const channel = await this.context.discordClient.channels.fetch(this.config.weeklySeedsChannel);
-								if (channel?.isTextBased()) {
-									await channel.messages.delete(seed.discord_message_id!);
+							const channel = await this.context.discordClient.channels.fetch(this.config.weeklySeedsChannel);
+							if (!channel?.isTextBased()) {
+								await interaction.reply('Could not get configured weekly seeds channel as text channel.');
+								return;
+							}
+							await this.context.db.executeInTransaction(async () => {
+								if (seed.discord_message_id) {
+									let message: Message<boolean> | undefined = undefined;
+									try {
+										message = await channel.messages.fetch(seed.discord_message_id);
+									} catch {}
+									if (message) {
+										await message.delete();
+									}
 								}
-							} catch {}
-							this.context.db.seeds.deleteSeed(seed.id);
-							await user_reply.followUp('Deleted seed and submitted scores successfully.');
-							await constructDiscordMessageAndUpdateIfExists(seed.week, this.context, this.config);
+								this.context.db.seeds.deleteSeed(seed.id);
+								await user_reply.followUp('Deleted seed and submitted scores successfully.');
+								await constructDiscordMessageAndUpdateIfExists(seed.week, this.context, this.config);
+							})
 							
 						}
 					} catch {
@@ -185,9 +205,6 @@ export default class SeedCommand implements Command {
 						await interaction.followUp('Confirmation not recieved within a minute, cancelling');
 						return;
 					}
-				} else {
-					this.context.db.seeds.deleteSeed(seed.id);
-					await interaction.reply('Deleted unpublished seed successfully.');
 				}
 
 				break;

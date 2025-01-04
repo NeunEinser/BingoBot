@@ -38,6 +38,32 @@ export default class Database {
 		return result[0].rowid;
 	}
 
+	public executeInTransaction<T>(action: () => T): T
+		executeInTransaction<T>(action: () => Promise<T>): Promise<T> {
+		this.db.exec('BEGIN TRANSACTION');
+		try {
+			const result = action();
+			if (result instanceof Promise) {
+				return new Promise((resolve, reject) => {
+					result.then(val => {
+						this.db.exec('COMMIT TRANSACTION');
+						resolve(val);
+					}).catch(err => {
+						this.db.exec('ROLLBACK TRANSACTION');
+						reject(err);
+					});
+				});
+			}
+			this.db.exec('COMMIT TRANSACTION');
+			return result;
+		} catch (e) {
+			try {
+				this.db.exec('ROLLBACK TRANSACTION');
+			} catch {}
+			throw e;
+		}
+	}
+
 	public close() {
 		try {
 			this.db.close();

@@ -42,6 +42,7 @@ export interface Week {
 }
 
 export default class WeekRepository {
+	private readonly getWeekQuery: StatementSync;
 	private readonly getCurrentWeekQuery: StatementSync;
 	private readonly getNextWeekNumberQuery: StatementSync;
 	private readonly getWeekByWeekNumberQuery: StatementSync;
@@ -49,10 +50,17 @@ export default class WeekRepository {
 	private readonly getFilteredWeeksQuery: StatementSync;
 	private readonly createWeekQuery: StatementSync;
 	private readonly publishWeekQuery: StatementSync;
+	private readonly deleteWeekQuery: StatementSync;
 	constructor(
 		db: DatabaseSync,
 		private readonly versions: VersionRepository
 	) {
+		this.getWeekQuery = db.prepare(`${DEFAULT_QUERY}
+			WHERE week.id = ?
+			ORDER BY
+				CASE WHEN published_on_unix_millis IS NULL THEN 0 ELSE 1 END,
+				published_on_unix_millis DESC
+		`);
 		this.getCurrentWeekQuery = db.prepare(`${DEFAULT_QUERY}
 			WHERE published_on_unix_millis NOT NULL
 				AND discord_message_id NOT NULL
@@ -97,6 +105,18 @@ export default class WeekRepository {
 				discord_message_id = ?
 			WHERE id = ? AND published_on_unix_millis ISNULL AND discord_message_id ISNULL
 		`);
+		this.deleteWeekQuery = db.prepare(`
+			DELETE FROM weeks WHERE id = ?;
+		`);
+	}
+
+	public getWeek(week_id: number) {
+		const result = this.getWeekQuery.all(week_id) as RawWeek[];
+		if (result.length > 0) {
+			return WeekRepository.decodeRawWeek(result[0]);
+		}
+
+		return null;
 	}
 
 	public getCurrentWeek() {
@@ -148,6 +168,10 @@ export default class WeekRepository {
 
 	public publishWeek(week_id: number, discord_message_id: string) {
 		this.publishWeekQuery.run(Date.now(), discord_message_id, week_id);
+	}
+
+	public deleteWeek(week_id: number) {
+		this.deleteWeekQuery.run(week_id);
 	}
 
 	public static decodeRawWeek(raw: RawWeek): Week {

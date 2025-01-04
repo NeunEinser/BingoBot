@@ -1,4 +1,4 @@
-import { AutocompleteInteraction, ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
+import { ActionRowBuilder, AutocompleteInteraction, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, InteractionContextType, Message, SlashCommandBuilder } from "discord.js";
 import { Command } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import SemVer from "../util/SemVer";
@@ -74,6 +74,16 @@ export default class WeekCommand implements Command {
 			.setName("refresh")
 			.setDescription("Forcefully updates the message with the current weekly seeds")
 		)
+		.addSubcommand(remove => remove
+			.setName("remove")
+			.setDescription("Deletes a week. This will also delete any submitted scores.")
+			.addIntegerOption(week => week
+				.setName("week_id")
+				.setDescription("The internal week id.")
+				.setAutocomplete(true)
+				.setRequired(true)
+			)
+		)
 
 	async execute(interaction: ChatInputCommandInteraction) {
 		switch (interaction.options.getSubcommand()) {
@@ -91,44 +101,9 @@ export default class WeekCommand implements Command {
 				await interaction.reply(msg);
 				break;
 			}
-			case 'publish': {
-				await interaction.deferReply();
-				const weekNumber = interaction.options.getInteger('week', true);
-				const week = this.context.db.weeks.getWeekByWeekNumber(weekNumber);
-				if (!week) {
-					await interaction.editReply('Could not find week.');
-					return;
-				}
-				if (week.published_on || week.discord_message_id) {
-					await interaction.editReply('Week is already published.');
-					return;
-				}
-				week.published_on = new Date();
-				const payload = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
-
-				const channel = await interaction.guild?.channels.fetch(this.config.weeklySeedsChannel);
-				if (!channel?.isTextBased()) {
-					await interaction.editReply('Could not get configured weekly seeds channel as text channel.');
-					return;
-				}
-				const message = await channel.send(payload);
-				this.context.db.weeks.publishWeek(week.id, message.id);
-				if (message.crosspostable) {
-					await message.crosspost();
-				}
-				const seeds = this.context.db.seeds.getSeedsByWeekId(week.id);
-
-				for (let seed of seeds) {
-					const seedPayload = await updateOrFetchMessageForSeed(seed, this.context, this.config);
-					const seedMessage = await channel.send(seedPayload);
-					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
-					// if (seedMessage.crosspostable) {
-					// 	await seedMessage.crosspost();
-					// }
-				}
-				await interaction.editReply("Successfully published week.");
+			case 'publish':
+				await this.publish(interaction); 
 				break;
-			}
 			case 'refresh': {
 				await interaction.deferReply();
 				const week = this.context.db.weeks.getCurrentWeek();
@@ -159,6 +134,9 @@ export default class WeekCommand implements Command {
 				await interaction.editReply("Successfully refreshed current week.");
 				break;
 			}
+			case 'remove':
+				await this.remove(interaction);
+				break;
 		}
 	}
 
@@ -177,6 +155,13 @@ export default class WeekCommand implements Command {
 				}
 				const weeks = this.context.db.weeks.getUnpublishedFilteredWeeks(focused.value, 25);
 				return weeks.map(w => ({ name: w.week.toString(), value: w.week }));
+			}
+			case 'week_id': {
+				const weeks = this.context.db.weeks.getFilteredWeeks(focused.value, 25);
+				return weeks.map(w => ({ name: `${w.week} (${w.published_on
+					? 'published on: ' + w.published_on.toISOString().split('T')[0]
+					: 'not published'
+				}) (id: ${w.id})`, value: w.id }));
 			}
 			case 'fetchr_version':
 			case 'max_fetchr_version':
@@ -264,6 +249,146 @@ export default class WeekCommand implements Command {
 	
 		this.context.db.weeks.createWeek(week, version, mc_version, max_version, max_mc_version, desc);
 		await interaction.reply("Successfully created week.");
+	}
+
+	private async publish(interaction: ChatInputCommandInteraction) {
+		await interaction.deferReply();
+		const weekNumber = interaction.options.getInteger('week', true);
+		const messages: Message<true>[] = [];
+
+		try {
+			await this.context.db.executeInTransaction(async () => {
+				const week = this.context.db.weeks.getWeekByWeekNumber(weekNumber);
+				if (!week) {
+					await interaction.editReply('Could not find week.');
+					return;
+				}
+				if (week.published_on || week.discord_message_id) {
+					await interaction.editReply('Week is already published.');
+					return;
+				}
+				week.published_on = new Date();
+				const payload = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
+
+				const channel = await interaction.guild?.channels.fetch(this.config.weeklySeedsChannel);
+				if (!channel?.isTextBased()) {
+					await interaction.editReply('Could not get configured weekly seeds channel as text channel.');
+					return;
+				}
+				const message = await channel.send(payload);
+				messages.push(message);
+				this.context.db.weeks.publishWeek(week.id, message.id);
+				const seeds = this.context.db.seeds.getSeedsByWeekId(week.id);
+
+				for (let seed of seeds) {
+					const seedPayload = await updateOrFetchMessageForSeed(seed, this.context, this.config);
+					const seedMessage = await channel.send(seedPayload);
+					messages.push(seedMessage);
+					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
+					// if (seedMessage.crosspostable) {
+					// 	await seedMessage.crosspost();
+					// }
+				}
+				if (message.crosspostable) {
+					await message.crosspost();
+				}
+				await interaction.editReply("Successfully published week.");
+			});
+		} catch (e) {
+			for (let message of messages) {
+				try {
+					await message.delete();
+				} catch {}
+			}
+			throw e;
+		}
+	}
+
+	private async remove(interaction: ChatInputCommandInteraction) {
+		const week = await this.context.db.executeInTransaction(async () => {
+			const week = this.context.db.weeks.getWeek(interaction.options.getInteger('week_id', true));
+
+			if (!week) {
+				await interaction.reply('Could not find week.')
+				return null;
+			}
+
+			if (!week.published_on && !week.discord_message_id) {
+				this.context.db.weeks.deleteWeek(week.id);
+				await interaction.reply('Deleted unpublished week successfully.');
+				return null;
+			}
+			return week;
+		});
+
+		if (week) {
+			const deleteBtn = new ButtonBuilder()
+				.setCustomId('delete')
+				.setLabel('Delete')
+				.setStyle(ButtonStyle.Danger);
+
+			const cancelBtn = new ButtonBuilder()
+				.setCustomId('cancel')
+				.setLabel('Cancel')
+				.setStyle(ButtonStyle.Secondary);
+
+			const btnRow = new ActionRowBuilder<ButtonBuilder>()
+				.setComponents(cancelBtn, deleteBtn);
+
+			const response = await interaction.reply({
+				content: `This week has already been published on ${
+						week.published_on?.toLocaleDateString('en-us', { month: 'long', day: 'numeric', year: 'numeric', weekday: 'long'})
+					}. Are you sure you want to delete this week?
+					
+					**This will also permanently delete all submitted scores!**`,
+				components: [btnRow]
+			});
+
+			try {
+				const user_reply = await response.awaitMessageComponent({ filter: i => i.user.id === interaction.user.id, time: 60_000 });
+
+				await user_reply.update({ components: [] });
+				if (user_reply.customId !== 'delete') {
+					await user_reply.followUp('Deletion has been cancelled by user');
+					return;
+				} else {
+					const channel = await this.context.discordClient.channels.fetch(this.config.weeklySeedsChannel);
+					if (!channel?.isTextBased()) {
+						await interaction.reply('Could not get configured weekly seeds channel as text channel.');
+						return;
+					}
+					await this.context.db.executeInTransaction(async () => {
+						if (week.discord_message_id) {
+							let message: Message<boolean> | undefined = undefined;
+							try {
+								message = await channel.messages.fetch(week.discord_message_id);
+							} catch{}
+							if (message) {
+								await message.delete();
+							}
+						}
+						const seeds = this.context.db.seeds.getSeedsByWeekId(week.id)
+						for (let seed of seeds) {
+							if (seed.discord_message_id) {
+								let message: Message<boolean> | undefined = undefined;
+								try {
+									message = await channel.messages.fetch(seed.discord_message_id);
+								} catch{}
+								if (message) {
+									await message.delete();
+								}
+							}
+						}
+						this.context.db.weeks.deleteWeek(week.id);
+						await user_reply.followUp('Deleted seed and submitted scores successfully.');
+					});
+				}
+			} catch {
+				await interaction.editReply({components: [] });
+				await interaction.followUp('Confirmation not recieved within a minute, cancelling');
+				return;
+			}
+		}
 	}
 }
 
