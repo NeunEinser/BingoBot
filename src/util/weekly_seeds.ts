@@ -52,7 +52,7 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 	if (!week.published_on && !week.discord_message_id) {
 		for (let seed of seeds) {
 			if (!seed.discord_message_id) {
-				message += (await updateMessageForSeed(seed, context, config)).content + '\n\n';
+				message += (await updateOrFetchMessageForSeed(seed, context, config)).content + '\n\n';
 			}
 		}
 	}
@@ -71,7 +71,7 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 	return messageOptions;
 }
 
-export async function updateMessageForSeed(seed: Seed, context: BotContext, config: BotConfig): Promise<BaseMessageOptionsWithPoll> {
+export async function updateOrFetchMessageForSeed(seed: Seed, context: BotContext, config: BotConfig): Promise<BaseMessageOptionsWithPoll> {
 	let message = '';
 
 	message += `**${seed.seed}** (${seed.practiced ? 'practiced' : 'blind'} ${seed.game_type.replace('_', '-')}`;
@@ -93,7 +93,7 @@ export async function updateMessageForSeed(seed: Seed, context: BotContext, conf
 					? ` (${millisToTimeStamp(s.time_in_millis)})`
 					: ''
 				)
-			: millisToTimeStamp(s.time_in_millis!),
+			: millisToTimeStamp(s.time_in_millis),
 		s.url_type ?? '-'
 	]);
 
@@ -154,7 +154,10 @@ export async function updateMessageForSeed(seed: Seed, context: BotContext, conf
 	return messageOptions;
 }
 
-function millisToTimeStamp(millis: number) {
+function millisToTimeStamp(millis: number | null) {
+	if (!millis) {
+		return 'DNF';
+	}
 	let cur = Math.floor(millis / 10);
 	let result = '';
 	if (cur % 100 !== 0) {

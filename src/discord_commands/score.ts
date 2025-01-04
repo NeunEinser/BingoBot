@@ -2,7 +2,7 @@ import { ActionRowBuilder, AutocompleteInteraction, ButtonBuilder, ButtonStyle, 
 import { Command } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import BotConfig from "../BotConfig";
-import { updateMessageForSeed } from "../util/weekly_seeds";
+import { updateOrFetchMessageForSeed } from "../util/weekly_seeds";
 
 export default class ScoreCommand implements Command {
 	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
@@ -21,7 +21,7 @@ export default class ScoreCommand implements Command {
 			)
 			.addStringOption(time => time
 				.setName("time")
-				.setDescription("The time of the run formatted like is shown in Fetchr, partial seconds optional.")
+				.setDescription("The time of the run either 'DNF' or formatted like is shown in Fetchr, partial seconds optional.")
 				.setRequired(true)
 			)
 			.addStringOption(video_url => video_url
@@ -31,6 +31,10 @@ export default class ScoreCommand implements Command {
 			.addStringOption(image_url => image_url
 				.setName("image_url")
 				.setDescription("Link to a screenshot after run completion.")
+			)
+			.addStringOption(desc => desc
+				.setName("description")
+				.setDescription("A description of what happened during the run.")
 			)
 		)
 		.addSubcommand(points => points
@@ -60,6 +64,10 @@ export default class ScoreCommand implements Command {
 			.addStringOption(image_url => image_url
 				.setName("image_url")
 				.setDescription("Link to a screenshot after run completion.")
+			)
+			.addStringOption(desc => desc
+				.setName("description")
+				.setDescription("A description of what happened during the run.")
 			)
 		)
 		.addSubcommand(remove => remove
@@ -121,11 +129,11 @@ export default class ScoreCommand implements Command {
 
 				const time_str = interaction.options.getString('time', sub === 'timed');
 				let time_in_millis: number | null = null;
-				if (time_str) {
+				if (time_str && time_str.toUpperCase() !== 'DNF') {
 					time_in_millis = 0;
 					if (!time_str.match(/^(?:(?:[0-9]{1,2}:)?(?:[0-9]|[0-5][0-9]):)?(?:[0-9]|[0-5][0-9])(?:\.[0-9]{1,3})?$/)) {
 						interaction.reply('Invalid time format. Expected format like hh:mm:ss.sss with at least seconds present.\n\n' +
-							'Valid examples:\n- 12:45.67\n- 12.345\n- 91:12:45.67\n- 99:59:59.999'
+							'Valid examples:\n- 12:45.67\n- 12.345\n- 91:12:45.67\n- 99:59:59.999\n-DNF'
 						);
 					}
 
@@ -155,7 +163,8 @@ export default class ScoreCommand implements Command {
 					sub === 'points' ? interaction.options.getInteger('points', true) : null,
 					time_in_millis,
 					url_type,
-					url
+					url,
+					interaction.options.getString('description')
 				)
 
 				if (!interaction.replied) {
@@ -163,7 +172,7 @@ export default class ScoreCommand implements Command {
 				}
 
 				try {
-					await updateMessageForSeed(seed, this.context, this.config);
+					await updateOrFetchMessageForSeed(seed, this.context, this.config);
 				} catch {
 					await interaction.followUp('Failed to refresh scoreboard');
 				}
@@ -223,7 +232,7 @@ export default class ScoreCommand implements Command {
 						await user_reply.followUp('Deleted submission successfully.');
 
 						try {
-							await updateMessageForSeed(seed, this.context, this.config);
+							await updateOrFetchMessageForSeed(seed, this.context, this.config);
 						} catch {
 							await interaction.followUp('Failed to refresh scoreboard');
 						}

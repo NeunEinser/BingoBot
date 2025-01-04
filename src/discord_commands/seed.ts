@@ -3,7 +3,7 @@ import { Command } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import { GAME_TYPES } from "../repositories/SeedRepository";
 import BotConfig from "../BotConfig";
-import { constructDiscordMessageAndUpdateIfExists, updateMessageForSeed } from "../util/weekly_seeds";
+import { constructDiscordMessageAndUpdateIfExists, updateOrFetchMessageForSeed } from "../util/weekly_seeds";
 
 const SEED_TYPES = [
 	'bingo',
@@ -120,7 +120,7 @@ export default class SeedCommand implements Command {
 						await interaction.reply('Could not get configured weekly seeds channel as text channel.');
 						return;
 					}
-					const seedPayload = await updateMessageForSeed(seed, this.context, this.config);
+					const seedPayload = await updateOrFetchMessageForSeed(seed, this.context, this.config);
 					const seedMessage = await channel.send(seedPayload);
 					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
 					// if (seedMessage.crosspostable) {

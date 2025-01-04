@@ -3,7 +3,7 @@ import { Command } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import SemVer from "../util/SemVer";
 import BotConfig from "../BotConfig";
-import { constructDiscordMessageAndUpdateIfExists, updateMessageForSeed } from "../util/weekly_seeds";
+import { constructDiscordMessageAndUpdateIfExists, updateOrFetchMessageForSeed } from "../util/weekly_seeds";
 
 export default class WeekCommand implements Command {
 	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
@@ -55,7 +55,7 @@ export default class WeekCommand implements Command {
 			.setDescription("Sends a preview that looks like it will be published when using publish")
 			.addIntegerOption(week => week
 				.setName("week")
-				.setDescription("The week number of the seed")
+				.setDescription("The week number of the seed.")
 				.setAutocomplete(true)
 				.setRequired(true)
 			)
@@ -65,7 +65,7 @@ export default class WeekCommand implements Command {
 			.setDescription("Publishes all seeds from a week")
 			.addIntegerOption(week => week
 				.setName("week")
-				.setDescription("The week number of the seed")
+				.setDescription("The week number to publish.")
 				.setAutocomplete(true)
 				.setRequired(true)
 			)
@@ -119,7 +119,7 @@ export default class WeekCommand implements Command {
 				const seeds = this.context.db.seeds.getSeedsByWeekId(week.id);
 
 				for (let seed of seeds) {
-					const seedPayload = await updateMessageForSeed(seed, this.context, this.config);
+					const seedPayload = await updateOrFetchMessageForSeed(seed, this.context, this.config);
 					const seedMessage = await channel.send(seedPayload);
 					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
 					// if (seedMessage.crosspostable) {
@@ -146,7 +146,7 @@ export default class WeekCommand implements Command {
 					return;
 				}
 				for (let seed of seeds) {
-					const seedPayload = await updateMessageForSeed(seed, this.context, this.config);
+					const seedPayload = await updateOrFetchMessageForSeed(seed, this.context, this.config);
 					if (!seed.discord_message_id) {
 						const seedMessage = await channel.send(seedPayload);
 						this.context.db.seeds.publishSeed(seed.id, seedMessage.id);

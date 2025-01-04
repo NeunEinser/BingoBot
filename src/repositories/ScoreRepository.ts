@@ -16,6 +16,8 @@ export interface Score {
 	time_in_millis: number | null;
 	url_type: UrlType;
 	url: string;
+	submitted_at: Date;
+	description: string | null;
 }
 
 export interface RawScore {
@@ -41,6 +43,8 @@ export interface RawScore {
 	time_in_millis: number | null;
 	url_type: number;
 	url: string;
+	submitted_at: number;
+	description: string | null;
 }
 
 const DEFAULT_QUERY = `SELECT
@@ -77,6 +81,8 @@ const DEFAULT_QUERY = `SELECT
 	score.time_in_millis,
 	score.url_type,
 	score.url,
+	score.submitted_at,
+	score.description,
 	player.id player__id,
 	player.in_game_name player__in_game_name,
 	player.discord_id player__discord_id,
@@ -132,12 +138,15 @@ export default class ScoreRepository {
 		`);
 		this.getPlayerScoresBySeedQuery = db.prepare(`${DEFAULT_QUERY}
 			WHERE seed.id = ? AND player.in_game_name NOT NULL
-			ORDER BY score.points DESC, score.time_in_millis
+			ORDER BY
+				score.points DESC,
+				CASE WHEN score.time_in_millis NOT NULL THEN 0 ELSE 1 END,
+				score.time_in_millis
 			LIMIT ?
 		`);
 		this.createOrUpdatePlayerScoreQuery = db.prepare(`INSERT OR REPLACE
-			INTO player_scores(player_id, seed_id, points, time_in_millis, url_type, url)
-			VALUES (?, ?, ?, ?, ?, ?)
+			INTO player_scores(player_id, seed_id, points, time_in_millis, url_type, url, description)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`);
 		this.deletePlayerScoreQuery = db.prepare('DELETE FROM player_scores WHERE player_id = ? AND seed_id = ?');
 	}
@@ -165,14 +174,15 @@ export default class ScoreRepository {
 		return result.map(ScoreRepository.decodeRawScore);
 	}
 
-	public createOrUpdatePlayerScore(seed_id: number, player_id: number, points: number | null, time_in_millis: number | null, url_type?: UrlType | null, url?: string | null) {
+	public createOrUpdatePlayerScore(seed_id: number, player_id: number, points: number | null, time_in_millis: number | null, url_type?: UrlType | null, url?: string | null, description?: string | null) {
 		this.createOrUpdatePlayerScoreQuery.run(
 			player_id,
 			seed_id,
 			points,
 			time_in_millis,
 			url_type ? URL_TYPES.indexOf(url_type) : null,
-			url ?? null
+			url ?? null,
+			description ?? null,
 		);
 	}
 
@@ -198,6 +208,7 @@ export default class ScoreRepository {
 		return {
 			...clean_raw,
 			url_type: URL_TYPES[raw.url_type],
+			submitted_at: new Date(raw.submitted_at * 1000),
 			player: player,
 			seed: SeedRepository.decodeRawSeed(raw_seed),
 		} as Score;
