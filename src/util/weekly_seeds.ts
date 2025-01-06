@@ -132,7 +132,7 @@ export async function updateOrFetchMessageForSeed(seed: Seed, context: BotContex
 			} else if (i > 2 && i < scores.length + 3) {
 				const score = scores[i - 3];
 				if (!score.rank) {
-					v = v.replace(/`\s+[^` ]+\s+`/g, '_$&_');
+					v = v.replace(/`\s+[^` ]+\s+`/g, '*$&*');
 				}
 				return v.replace(/`\s+(?:image|video)\s+`/, `**[$&](<${score.url}>)**`)
 			}
