@@ -88,15 +88,10 @@ export default class ScoreCommand implements Command {
 		switch (sub) {
 			case 'points':
 			case 'timed': {
-				const week = this.context.db.weeks.getCurrentWeek();
-				if (!week) {
-					await interaction.reply('There is no week currently published.');
-					return;
-				}
-
-				const seed = this.context.db.seeds.getSeed(interaction.options.getInteger('seed_id', true))
+				const seed_id = interaction.options.getInteger('seed_id', true);
+				const seed = this.context.db.seeds.getSeed(seed_id)
 				if (!seed) {
-					await interaction.reply('Seed is not part of the current week.');
+					await interaction.reply(`Could not find seed with id ${seed_id}.`);
 					return;
 				}
 				switch (sub) {
@@ -225,17 +220,11 @@ export default class ScoreCommand implements Command {
 	}
 
 	async handleScoreSubmissionButtonClick(interaction: ButtonInteraction) {
-		const week = this.context.db.weeks.getCurrentWeek();
-		if (!week) {
-			await interaction.reply({ content: 'There is no week currently published.', ephemeral: true });
-			return;
-		}
-
 		const seed_id = parseInt(interaction.customId.substring(SUBMIT_SCORE_ID.length + 1));
 	
 		const seed = this.context.db.seeds.getSeed(seed_id)
 		if (!seed) {
-			await interaction.reply({ content: 'Seed is not part of the current week.', ephemeral: true });
+			await interaction.reply({ content: `Could not find seed with id ${seed_id}.`, ephemeral: true });
 			return;
 		}
 		let player = this.context.db.players.getPlayerByDiscordId(interaction.user.id);
@@ -307,16 +296,10 @@ export default class ScoreCommand implements Command {
 	}
 
 	async handleModalSubmit(interaction: ModalSubmitInteraction) {
-		const week = this.context.db.weeks.getCurrentWeek();
-		if (!week) {
-			await interaction.reply({ content: 'There is no week currently published.', ephemeral: true });
-			return;
-		}
-
 		const seed_id = parseInt(interaction.customId.substring(SUBMIT_SCORE_ID.length + 1));
-		const seed = this.context.db.seeds.getSeed(seed_id)
+		const seed = this.context.db.seeds.getSeed(seed_id);
 		if (!seed) {
-			await interaction.reply({ content: 'Seed is not part of the current week.', ephemeral: true });
+			await interaction.reply({ content: `Could not find seed with id ${seed_id}.`, ephemeral: true });
 			return;
 		}
 
@@ -387,6 +370,12 @@ export default class ScoreCommand implements Command {
 		description?: string | null,
 		ephemeral?: true,
 	) : Promise<void> {
+		const week = this.context.db.weeks.getCurrentWeek();
+		if (week?.id !== seed.week.id) {
+			await interaction.reply({ content: 'Seed is not part of the current week.', ephemeral});
+			return;
+		}
+
 		const url = video_url?.trim() ? video_url?.trim() : image_url?.trim();
 
 		if (url && (!url.startsWith('https://') || !URL.canParse(url))) {
