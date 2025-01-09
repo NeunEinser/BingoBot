@@ -6,7 +6,7 @@ import { Seed } from "../repositories/SeedRepository";
 import { Week } from "../repositories/WeekRepository";
 import { SUBMIT_SCORE_ID } from "../CommandRegistry";
 
-export async function constructDiscordMessageAndUpdateIfExists(week: Week, context: BotContext, config: BotConfig): Promise<BaseMessageOptionsWithPoll> {
+export async function constructDiscordMessageAndUpdateIfExists(week: Week, context: BotContext, config: BotConfig): Promise<{ message: BaseMessageOptionsWithPoll, seedMessages?: BaseMessageOptionsWithPoll[] }> {
 	const fetchrVersionStr = week.version.toString() + (week.max_version ? '-' + week.max_version.toString() : '');
 	const mcVersionStr = week.mc_version.toString() + (week.max_mc_version ? '-' + week.max_mc_version.toString() : '');
 	const seeds = context.db.seeds.getSeedsByWeekId(week.id);
@@ -48,12 +48,14 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 		message += '\n';
 	}
 
-	message += `\nhttp://www.playminecraftbingo.com/fetchr-weekly-seeds/${week.week}\n\n`
+	message += `\nhttp://www.playminecraftbingo.com/fetchr-weekly-seeds/${week.week}`
+	let seedMessages = undefined;
 
 	if (!week.published_on && !week.discord_message_id) {
+		seedMessages = [];
 		for (let seed of seeds) {
 			if (!seed.discord_message_id) {
-				message += (await updateOrFetchMessageForSeed(seed, context, config)).content + '\n\n';
+				seedMessages.push(await updateOrFetchMessageForSeed(seed, context, config));
 			}
 		}
 	}
@@ -69,7 +71,7 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 		}
 	}
 
-	return messageOptions;
+	return { message: messageOptions, seedMessages };
 }
 
 export async function updateOrFetchMessageForSeed(seed: Seed, context: BotContext, config: BotConfig): Promise<BaseMessageOptionsWithPoll> {

@@ -98,7 +98,10 @@ export default class WeekCommand implements Command {
 					return;
 				}
 				const msg = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
-				await interaction.reply(msg);
+				await interaction.reply(msg.message);
+				for (let seedMsg of msg.seedMessages ?? []) {
+					await interaction.followUp(seedMsg);
+				}
 				break;
 			}
 			case 'publish':
@@ -295,7 +298,7 @@ export default class WeekCommand implements Command {
 
 				week.published_on = new Date();
 				const payload = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
-				const message = await channel.send(payload);
+				const message = await channel.send(payload.message);
 				messages.push(message);
 				this.context.db.weeks.publishWeek(week.id, message.id);
 				const seeds = this.context.db.seeds.getSeedsByWeekId(week.id);
