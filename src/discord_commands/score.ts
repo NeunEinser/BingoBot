@@ -1,4 +1,4 @@
-import { ActionRowBuilder, AutocompleteInteraction, ButtonBuilder, ButtonInteraction, ButtonStyle, ChatInputCommandInteraction, ModalBuilder, ModalSubmitInteraction, SlashCommandBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { ActionRowBuilder, AutocompleteInteraction, ButtonBuilder, ButtonInteraction, ButtonStyle, ChatInputCommandInteraction, ComponentType, ModalBuilder, ModalSubmitInteraction, SlashCommandBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 import { Command, SUBMIT_SCORE_ID } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import BotConfig from "../BotConfig";
@@ -6,7 +6,18 @@ import { millisToTimeStamp, updateOrFetchMessageForSeed } from "../util/weekly_s
 import { Seed } from "../repositories/SeedRepository";
 import { Player } from "../repositories/PlayerRepository";
 
+interface ModalOptions {
+	include_ign?: boolean,
+	points?: number | string | null,
+	time?: string | null,
+	video_url?: string | null,
+	image_url?: string | null,
+	description?: string | null,
+}
+
 export default class ScoreCommand implements Command {
+	private readonly failedModals: Map<number, Map<number, { timeout: NodeJS.Timeout, options: ModalOptions}>> = new Map();
+
 	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
 
 	public static readonly data =	new SlashCommandBuilder()
@@ -165,7 +176,10 @@ export default class ScoreCommand implements Command {
 				});
 
 				try {
-					const user_reply = await response.awaitMessageComponent({ filter: i => i.user.id === interaction.user.id, time: 60_000 });
+					const user_reply = await response.awaitMessageComponent<ComponentType.Button>({
+						filter: i => i.user.id === interaction.user.id,
+						time: 60_000
+					});
 
 					await user_reply.update({ components: [] });
 					if (user_reply.customId !== 'delete') {
@@ -230,11 +244,30 @@ export default class ScoreCommand implements Command {
 			return;
 		}
 
+		await this.openModal(
+			interaction,
+			seed,
+			(this.failedModals.get(seed.id)?.get(player?.id ?? -1))?.options ?? {
+				include_ign: !player?.in_game_name,
+				points: score?.points,
+				time: score && (seed.game_type !== 'points' || score.time_in_millis) ? millisToTimeStamp(score.time_in_millis) : null,
+				image_url: score?.url_type === 'image' ? score.url : null,
+				video_url: score?.url_type === 'video' ? score.url : null,
+				description: score?.description,
+			}
+		)
+	}
+
+	private async openModal(
+		interaction: ButtonInteraction,
+		seed: Seed,
+		options?: ModalOptions,
+	) {
 		const modal = new ModalBuilder()
 			.setTitle(`Submit ${seed.game_type === 'points' ? 'points' : 'time'} for seed ${seed.seed}`)
 			.setCustomId(`${SUBMIT_SCORE_ID}_${seed.id}`)
 
-		if (!player?.in_game_name) {
+		if (options?.include_ign) {
 			const ign_input = new TextInputBuilder()
 				.setCustomId('ign')
 				.setLabel('What is your in-game name?')
@@ -288,25 +321,27 @@ export default class ScoreCommand implements Command {
 			.setStyle(TextInputStyle.Paragraph)
 			.setRequired(false);
 		const description_row = new ActionRowBuilder<TextInputBuilder>().addComponents(description);
-		if (score) {
-			points_input?.setValue(score.points!.toString());
-			if (seed.game_type !== 'points' || score.time_in_millis) {
-				time_input.setValue(millisToTimeStamp(score.time_in_millis));
+		if (options) {
+			if (options.points !== undefined && options.points !== null) {
+				points_input?.setValue(options.points.toString());
 			}
-			if (score.url_type === 'video') {
-				video_url.setValue(score.url);
+			if (options.time) {
+				time_input.setValue(options.time);
 			}
-			if (score.url_type === 'image') {
-				image_url.setValue(score.url);
+			if (options.video_url) {
+				video_url.setValue(options.video_url);
 			}
-			if (score.description) {
-				description.setValue(score.description);
+			if (options.image_url) {
+				image_url.setValue(options.image_url);
+			}
+			if (options.description) {
+				description.setValue(options.description);
 			}
 		}
 
 		modal.addComponents(time_row, video_row, image_row, description_row);
 		await interaction.showModal(modal);
-	}
+	} 
 
 	async handleModalSubmit(interaction: ModalSubmitInteraction) {
 		const seed_id = parseInt(interaction.customId.substring(SUBMIT_SCORE_ID.length + 1));
@@ -322,32 +357,99 @@ export default class ScoreCommand implements Command {
 			player = this.context.db.players.getPlayer(this.context.db.getLastInsertRowId())!
 		}
 
-		if (!player.in_game_name) {
-			try {
-				const ign = interaction.fields.getTextInputValue('ign');
-				if (!ign.match(/^[a-zA-Z0-9_]{3,16}$/)) {
-					await interaction.reply({ content: 'Invalid in-game name.', ephemeral: true });
-					return;
-				}
-				this.context.db.players.setIgn(interaction.user.id, ign);
-				player.in_game_name = ign;
-			} catch {
-				await interaction.reply({ content: 'Expected in-game name in submission.', ephemeral: true });
-				return;
+		const points = seed.game_type === 'points' ? interaction.fields.getTextInputValue('points') : undefined;
+		const time = interaction.fields.getTextInputValue('time');
+		const video_url = interaction.fields.getTextInputValue('video_url');
+		const image_url = interaction.fields.getTextInputValue('image_url');
+		const description = interaction.fields.getTextInputValue('description');
+
+		const postError = async (msg?: string) => {
+			let forSeed = this.failedModals.get(seed.id);
+			if (!forSeed) {
+				forSeed = new Map();
+				this.failedModals.set(seed.id, forSeed);
 			}
+
+			const old = forSeed.get(player.id);
+			if (old) {
+				clearTimeout(old.timeout);
+			}
+
+			const timeout = setTimeout(() => {
+				const failedForSeed = this.failedModals.get(seed_id);
+				if (failedForSeed)
+					failedForSeed.delete(player.id);
+				if (failedForSeed?.size === 0)
+					this.failedModals.delete(seed_id);
+			}, 300_000);
+
+			forSeed.set(player.id, {
+				timeout,
+				options: {
+					include_ign: !player.in_game_name,
+					points,
+					time,
+					image_url,
+					video_url,
+					description,
+				}
+			});
+
+			await interaction.reply({
+				content: msg ?? 'Failed to submit score',
+				ephemeral: true,
+			});
 		}
 
-		await this.handleScoreSubmission(
-			interaction,
-			seed,
-			player,
-			seed.game_type === 'points' ? interaction.fields.getTextInputValue('points') : undefined,
-			interaction.fields.getTextInputValue('time'),
-			interaction.fields.getTextInputValue('video_url'),
-			interaction.fields.getTextInputValue('image_url'),
-			interaction.fields.getTextInputValue('description'),
-			true,
-		)
+		try {
+			if (!player.in_game_name) {
+				try {
+					const ign = interaction.fields.getTextInputValue('ign');
+					if (!ign.match(/^[a-zA-Z0-9_]{3,16}$/)) {
+						await postError('Invalid in-game name.');
+						return;
+					}
+					this.context.db.players.setIgn(interaction.user.id, ign);
+					player.in_game_name = ign;
+				} catch {
+					await postError('Expected in-game name in submission.');
+					return;
+				}
+			}
+
+			const response = await this.handleScoreSubmission(
+				interaction,
+				seed,
+				player,
+				points,
+				time,
+				video_url,
+				image_url,
+				description,
+				true,
+			)
+
+			if (response.is_error) {
+				await postError(response.message);
+				return;
+			}
+
+			const failedForSeed = this.failedModals.get(seed_id);
+			if (failedForSeed) {
+				const playerFail = failedForSeed.get(player.id);
+				if (playerFail) {
+					clearTimeout(playerFail.timeout);
+					failedForSeed.delete(player.id);
+				}
+
+				if (failedForSeed.size === 0) {
+					this.failedModals.delete(seed_id);
+				}
+			}
+		} catch (e) {
+			await postError();
+			throw e;
+		}
 	}
 
 	private async handleScoreSubmission(
@@ -360,7 +462,7 @@ export default class ScoreCommand implements Command {
 		image_url?: string | null,
 		description?: string | null,
 		ephemeral?: true,
-	) : Promise<void>
+	) : Promise<{ message?: string; is_error: boolean }>
 	private async handleScoreSubmission(
 		interaction: ModalSubmitInteraction,
 		seed: Seed,
@@ -371,7 +473,7 @@ export default class ScoreCommand implements Command {
 		image_url?: string,
 		description?: string,
 		ephemeral?: true,
-	) : Promise<void> 
+	) : Promise<{ message?: string; is_error: boolean }> 
 	private async handleScoreSubmission(
 		interaction: ChatInputCommandInteraction | ModalSubmitInteraction,
 		seed: Seed,
@@ -382,18 +484,16 @@ export default class ScoreCommand implements Command {
 		image_url?: string | null,
 		description?: string | null,
 		ephemeral?: true,
-	) : Promise<void> {
+	) : Promise<{ message?: string; is_error: boolean }> {
 		const week = this.context.db.weeks.getCurrentWeek();
 		if (week?.id !== seed.week.id) {
-			await interaction.reply({ content: 'Seed is not part of the current week.', ephemeral});
-			return;
+			return { message: 'Seed is not part of the current week.', is_error: true };
 		}
 
 		const url = video_url?.trim() ? video_url?.trim() : image_url?.trim();
 
 		if (url && (!url.startsWith('https://') || !URL.canParse(url))) {
-			await interaction.reply({ content: 'Provided an invalid url.', ephemeral});
-			return;
+			return { message: 'Invalid url.', is_error: true };
 		}
 
 		const url_type = video_url?.trim()
@@ -410,25 +510,22 @@ export default class ScoreCommand implements Command {
 		} else if (points.match(/^\d+$/)) {
 			parsedPoints = parseInt(points);
 		} else {
-			interaction.reply({ content: 'Points must be an integer.', ephemeral });
-			return;
+			return { message: 'Points must be an integer.', is_error: true };
 		}
 
 		if (parsedPoints !== null && (parsedPoints < 0 || parsedPoints > 25)) {
-			interaction.reply({ content: 'Points must be between 0 and 25.', ephemeral });
-			return;
+			return { message: 'Points must be between 0 and 25.', is_error: true };
 		}
 
 		let time_in_millis: number | null = null;
 		if (time && time.toUpperCase() !== 'DNF') {
 			time_in_millis = 0;
 			if (!time.match(/^(?:(?:[0-9]{1,2}:)?(?:[0-9]|[0-5][0-9]):)?(?:[0-9]|[0-5][0-9])(?:\.[0-9]{1,3})?$/)) {
-				interaction.reply({
-					content: 'Invalid time format. Expected format like hh:mm:ss.sss with at least seconds present.\n\n' +
-						'Valid examples:\n- 12:45.67\n- 12.345\n- 91:12:45.67\n- 99:59:59.999\n-DNF',
-					ephemeral
-				});
-				return;
+				return {
+					message: 'Invalid time format. Expected format like hh:mm:ss.sss with at least seconds present.\n\n' +
+						'Valid examples:\n- 12:45.67\n- 12.345\n- 91:12:45.67\n- 99:59:59.999\n- DNF',
+					is_error: true,
+				};
 			}
 
 			const partial_split = time.split('.');
@@ -469,8 +566,9 @@ export default class ScoreCommand implements Command {
 		try {
 			await updateOrFetchMessageForSeed(seed, this.context, this.config);
 		} catch {
-			await interaction.followUp('Failed to refresh scoreboard');
+			await interaction.followUp({ content: 'Failed to refresh scoreboard.', ephemeral});
 		}
+		return { is_error: false };
 	}
 
 	private async getOrCreatePlayer(interaction: ChatInputCommandInteraction) {
