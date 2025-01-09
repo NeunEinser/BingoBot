@@ -36,9 +36,23 @@ export default class CommandRegistry {
 
 		await commandApi.set(Object.values(commandDefs).map(d => d.data.toJSON()));
 
-		this.context.discordClient.on('interactionCreate', async interaction => {
+		this.context.discordClient.on(Events.InteractionCreate, async interaction => {
+			function logInteraction(type?: string, name?: string) {
+				BingoBot.logger.info(`Received ${type ?? 'unknown'} interaction${name ? ' for ' + name : ''}\n${JSON.stringify(
+					{ ...interaction },
+					(key, value) => typeof value === 'bigint'
+						? value.toString()
+						: key === 'options'
+							? { ...value, data: value.data }
+							: value,
+					4
+				)}`);
+			}
+
 			try {
 				if (interaction.isAutocomplete()) {
+					logInteraction('autocomplete', interaction.commandName);
+
 					const command = commandDefs[interaction.commandName]?.command;
 					if (!command) {
 						BingoBot.logger.error(`Could not find matching command definition for ${interaction.commandName}`);
@@ -56,8 +70,7 @@ export default class CommandRegistry {
 						BingoBot.logger.warn(`Command ${interaction.commandName} does not have an autocomplete script defined.`);
 					}
 				} else if (interaction.isChatInputCommand()) {
-					BingoBot.logger.info(`Received command ${interaction.commandName}\n${JSON.stringify(interaction.options.data)}`);
-					
+					logInteraction('command', interaction.commandName);
 					const command = commandDefs[interaction.commandName]?.command;
 					if (!command) {
 						BingoBot.logger.error(`Could not find matching command definition for ${interaction.commandName}`);
@@ -73,6 +86,7 @@ export default class CommandRegistry {
 						}
 					}
 				} else if (interaction.isModalSubmit()) {
+					logInteraction('modal submit', interaction.customId);
 					// TODO make nice
 					if (interaction.customId === 'ign')
 						await (commandDefs['ign'].command as IgnCommand).handleModalResponse(interaction);
