@@ -2,7 +2,7 @@ import { ActionRowBuilder, AutocompleteInteraction, ButtonBuilder, ButtonInterac
 import { Command, SUBMIT_SCORE_ID } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import BotConfig from "../BotConfig";
-import { updateOrFetchMessageForSeed } from "../util/weekly_seeds";
+import { millisToTimeStamp, updateOrFetchMessageForSeed } from "../util/weekly_seeds";
 import { Seed } from "../repositories/SeedRepository";
 import { Player } from "../repositories/PlayerRepository";
 
@@ -221,23 +221,20 @@ export default class ScoreCommand implements Command {
 
 	async handleScoreSubmissionButtonClick(interaction: ButtonInteraction) {
 		const seed_id = parseInt(interaction.customId.substring(SUBMIT_SCORE_ID.length + 1));
+		const player = this.context.db.players.getPlayerByDiscordId(interaction.user.id);
+		const score = player ? this.context.db.scores.getPlayerScore(player.id, seed_id) : null;
 	
-		const seed = this.context.db.seeds.getSeed(seed_id)
+		const seed = score?.seed ?? this.context.db.seeds.getSeed(seed_id);
 		if (!seed) {
 			await interaction.reply({ content: `Could not find seed with id ${seed_id}.`, ephemeral: true });
 			return;
-		}
-		let player = this.context.db.players.getPlayerByDiscordId(interaction.user.id);
-		if (!player) {
-			this.context.db.players.createPlayer(interaction.user.id);
-			player = this.context.db.players.getPlayer(this.context.db.getLastInsertRowId())!
 		}
 
 		const modal = new ModalBuilder()
 			.setTitle(`Submit ${seed.game_type === 'points' ? 'points' : 'time'} for seed ${seed.seed}`)
 			.setCustomId(`${SUBMIT_SCORE_ID}_${seed.id}`)
 
-		if (!player.in_game_name) {
+		if (!player?.in_game_name) {
 			const ign_input = new TextInputBuilder()
 				.setCustomId('ign')
 				.setLabel('What is your in-game name?')
@@ -249,8 +246,9 @@ export default class ScoreCommand implements Command {
 			const ign_row = new ActionRowBuilder<TextInputBuilder>().addComponents(ign_input);
 			modal.addComponents(ign_row);
 		}
+		let points_input = undefined;
 		if (seed.game_type === 'points') {
-			const points_input = new TextInputBuilder()
+			points_input = new TextInputBuilder()
 				.setCustomId('points')
 				.setLabel('Points')
 				.setStyle(TextInputStyle.Short)
@@ -290,6 +288,21 @@ export default class ScoreCommand implements Command {
 			.setStyle(TextInputStyle.Paragraph)
 			.setRequired(false);
 		const description_row = new ActionRowBuilder<TextInputBuilder>().addComponents(description);
+		if (score) {
+			points_input?.setValue(score.points!.toString());
+			if (seed.game_type !== 'points' || score.time_in_millis) {
+				time_input.setValue(millisToTimeStamp(score.time_in_millis));
+			}
+			if (score.url_type === 'video') {
+				video_url.setValue(score.url);
+			}
+			if (score.url_type === 'image') {
+				image_url.setValue(score.url);
+			}
+			if (score.description) {
+				description.setValue(score.description);
+			}
+		}
 
 		modal.addComponents(time_row, video_row, image_row, description_row);
 		await interaction.showModal(modal);
@@ -303,10 +316,10 @@ export default class ScoreCommand implements Command {
 			return;
 		}
 
-		const player = this.context.db.players.getPlayerByDiscordId(interaction.user.id);
+		let player = this.context.db.players.getPlayerByDiscordId(interaction.user.id);
 		if (!player) {
-			await interaction.reply({ content: 'Player was not created correctly, please try again.', ephemeral: true });
-			return;
+			this.context.db.players.createPlayer(interaction.user.id);
+			player = this.context.db.players.getPlayer(this.context.db.getLastInsertRowId())!
 		}
 
 		if (!player.in_game_name) {
@@ -319,7 +332,7 @@ export default class ScoreCommand implements Command {
 				this.context.db.players.setIgn(interaction.user.id, ign);
 				player.in_game_name = ign;
 			} catch {
-				await interaction.reply({ content: 'Expected in game name.', ephemeral: true });
+				await interaction.reply({ content: 'Expected in-game name in submission.', ephemeral: true });
 				return;
 			}
 		}
@@ -390,7 +403,7 @@ export default class ScoreCommand implements Command {
 				: null
 
 		let parsedPoints: null | number;
-		if (!points) {
+		if (points === null || points === undefined || points === '') {
 			parsedPoints = null;
 		} else if (typeof points === 'number') {
 			parsedPoints = points;
@@ -415,6 +428,7 @@ export default class ScoreCommand implements Command {
 						'Valid examples:\n- 12:45.67\n- 12.345\n- 91:12:45.67\n- 99:59:59.999\n-DNF',
 					ephemeral
 				});
+				return;
 			}
 
 			const partial_split = time.split('.');

@@ -168,7 +168,7 @@ export async function updateOrFetchMessageForSeed(seed: Seed, context: BotContex
 	return messageOptions;
 }
 
-function millisToTimeStamp(millis: number | null) {
+export function millisToTimeStamp(millis: number | null) {
 	if (!millis) {
 		return 'DNF';
 	}
