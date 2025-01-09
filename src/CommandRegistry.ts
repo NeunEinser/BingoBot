@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionChoiceData, AutocompleteInteraction, ChatInputCommandInteraction, Collection, MessageFlags, SlashCommandBuilder, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder } from 'discord.js';
+import { ApplicationCommandOptionChoiceData, AutocompleteInteraction, ChatInputCommandInteraction, Collection, Events, MessageFlags, SlashCommandBuilder, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder } from 'discord.js';
 import BingoBot, { BotContext } from './BingoBot';
 import PingCommand from './discord_commands/ping';
 import IntroCommand from './discord_commands/intro';
@@ -16,13 +16,15 @@ export interface Command {
 	autocomplete?: (interaction: AutocompleteInteraction) => Promise<ApplicationCommandOptionChoiceData[] | undefined>,
 }
 
+export const SUBMIT_SCORE_ID = 'submit_seed_score'
+
 export default class CommandRegistry {
 	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
 
 	public async registerCommands(): Promise<void> {
 		const commandApi = this.context.discordClient.application!.commands
 
-		const commandDefs: Record<string, { data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder, command: Command}> = {
+		const commandDefs = {
 			ping: { data: PingCommand.data, command: new PingCommand() },
 			intro: { data: IntroCommand.data, command: new IntroCommand() },
 			shutdown: { data: ShutdownCommand.data, command: new ShutdownCommand() },
@@ -33,6 +35,9 @@ export default class CommandRegistry {
 			ign: { data: IgnCommand.data, command: new IgnCommand(this.context, this.config) },
 			score: { data: ScoreCommand.data, command: new ScoreCommand(this.context, this.config) },
 		}
+
+		const commandLookup: Record<string, { data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder, command: Command}>
+			= commandDefs;
 
 		await commandApi.set(Object.values(commandDefs).map(d => d.data.toJSON()));
 
@@ -53,7 +58,7 @@ export default class CommandRegistry {
 				if (interaction.isAutocomplete()) {
 					logInteraction('autocomplete', interaction.commandName);
 
-					const command = commandDefs[interaction.commandName]?.command;
+					const command = commandLookup[interaction.commandName]?.command;
 					if (!command) {
 						BingoBot.logger.error(`Could not find matching command definition for ${interaction.commandName}`);
 						return;
@@ -71,7 +76,7 @@ export default class CommandRegistry {
 					}
 				} else if (interaction.isChatInputCommand()) {
 					logInteraction('command', interaction.commandName);
-					const command = commandDefs[interaction.commandName]?.command;
+					const command = commandLookup[interaction.commandName]?.command;
 					if (!command) {
 						BingoBot.logger.error(`Could not find matching command definition for ${interaction.commandName}`);
 						return;
@@ -87,9 +92,20 @@ export default class CommandRegistry {
 					}
 				} else if (interaction.isModalSubmit()) {
 					logInteraction('modal submit', interaction.customId);
-					// TODO make nice
-					if (interaction.customId === 'ign')
-						await (commandDefs['ign'].command as IgnCommand).handleModalResponse(interaction);
+
+					if (interaction.customId === 'ign') {
+						await commandDefs.ign.command.handleModalSubmit(interaction);
+					} else if (interaction.customId.startsWith(SUBMIT_SCORE_ID)) {
+						await commandDefs.score.command.handleModalSubmit(interaction);
+					}
+				} else if (interaction.isButton()) {
+					logInteraction('modal submit', interaction.customId);
+
+					if (interaction.customId.startsWith(SUBMIT_SCORE_ID)) {
+						await commandDefs.score.command.handleScoreSubmissionButtonClick(interaction);
+					}
+				} else {
+					logInteraction();
 				}
 			} catch (err) {
 				try {

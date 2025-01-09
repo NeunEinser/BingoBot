@@ -24,7 +24,7 @@ export default class IgnCommand implements Command {
 		await this.handle(interaction, ign);
 	}
 
-	async handleModalResponse(interaction: ModalSubmitInteraction) {
+	async handleModalSubmit(interaction: ModalSubmitInteraction) {
 		const ign = interaction.fields.getTextInputValue('ign');
 		await this.handle(interaction, ign);
 	}

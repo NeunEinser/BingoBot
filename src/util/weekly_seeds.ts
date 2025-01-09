@@ -1,9 +1,10 @@
-import { BaseMessageOptionsWithPoll } from "discord.js";
+import { ActionRowBuilder, BaseMessageOptionsWithPoll, ButtonBuilder, ButtonStyle } from "discord.js";
 import { table } from "table";
 import { BotContext } from "../BingoBot";
 import BotConfig from "../BotConfig";
 import { Seed } from "../repositories/SeedRepository";
 import { Week } from "../repositories/WeekRepository";
+import { SUBMIT_SCORE_ID } from "../CommandRegistry";
 
 export async function constructDiscordMessageAndUpdateIfExists(week: Week, context: BotContext, config: BotConfig): Promise<BaseMessageOptionsWithPoll> {
 	const fetchrVersionStr = week.version.toString() + (week.max_version ? '-' + week.max_version.toString() : '');
@@ -47,7 +48,7 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 		message += '\n';
 	}
 
-	message += `\nhttp://www.playminecraftbingo.com/fetchr-weekly-seeds/${week.week}\n\n-# Use /score to submit your scores!\n\n`
+	message += `\nhttp://www.playminecraftbingo.com/fetchr-weekly-seeds/${week.week}\n\n`
 
 	if (!week.published_on && !week.discord_message_id) {
 		for (let seed of seeds) {
@@ -140,8 +141,19 @@ export async function updateOrFetchMessageForSeed(seed: Seed, context: BotContex
 		})
 		.join('\n');
 
+
+		
+	const submitBtn = new ButtonBuilder()
+		.setCustomId(`${SUBMIT_SCORE_ID}_${seed.id}`)
+		.setLabel('Submit Score')
+		.setStyle(ButtonStyle.Primary);
+
+	const btnRow = new ActionRowBuilder<ButtonBuilder>()
+		.setComponents(submitBtn);
+
 	const messageOptions: BaseMessageOptionsWithPoll = {
-		content: message.trim(),
+		content: message.trim().substring(0, 2_000),
+		components: [btnRow],
 	};
 
 	if (seed.discord_message_id) {
