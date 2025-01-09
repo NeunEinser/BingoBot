@@ -184,7 +184,7 @@ export default class WeekCommand implements Command {
 					if (min_version_str) {
 						try {
 							const min_version = SemVer.fromString(min_version_str);
-							versions = versions.filter(v => v.major > min_version.major && v.minor > min_version.minor && v.patch > min_version.patch);
+							versions = versions.filter(v => v.compare(min_version) > 0);
 						} catch {}
 					}
 				}
@@ -231,7 +231,11 @@ export default class WeekCommand implements Command {
 	
 		if (max_version_str) {
 			try {
-				max_version = SemVer.fromString(max_version_str)
+				max_version = SemVer.fromString(max_version_str);
+				if (max_version.compare(version) < 0) {
+					await interaction.reply(`Max version (${max_version}) cannot be smaller than min version (${version})`);
+					return;
+				}
 			} catch (err) {
 				await interaction.reply(`Invalid version string ${max_version_str}: ${(err as Error)?.message}`);
 				return;
@@ -240,7 +244,11 @@ export default class WeekCommand implements Command {
 	
 		if (max_mc_version_str) {
 			try {
-				max_mc_version = SemVer.fromString(max_mc_version_str)
+				max_mc_version = SemVer.fromString(max_mc_version_str);
+				if (max_mc_version.compare(mc_version) < 0) {
+					await interaction.reply(`Max mc version (${max_mc_version}) cannot be smaller than min mc version (${mc_version})`);
+					return;
+				}
 			} catch (err) {
 				await interaction.reply(`Invalid version string ${max_mc_version_str}: ${(err as Error)?.message}`);
 				return;

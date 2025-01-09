@@ -23,6 +23,16 @@ export default class SemVer {
 		return new SemVer(major, minor, patch);
 	}
 
+	public compare(other: SemVer) {
+		if (other.major !== this.major) {
+			return this.major - other.major;
+		}
+		if (other.minor !== this.minor) {
+			return this.minor - other.minor;
+		}
+		return this.patch - other.patch;
+	}
+
 	public toString() {
 		return `${this.major}.${this.minor}${this.patch == 0 ? '' : `.${this.patch}`}`
 	}
