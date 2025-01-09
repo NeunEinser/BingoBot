@@ -275,14 +275,26 @@ export default class WeekCommand implements Command {
 					await interaction.editReply('Week is already published.');
 					return;
 				}
-				week.published_on = new Date();
-				const payload = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
 
 				const channel = await interaction.guild?.channels.fetch(this.config.weeklySeedsChannel);
 				if (!channel?.isTextBased()) {
 					await interaction.editReply('Could not get configured weekly seeds channel as text channel.');
 					return;
 				}
+				
+				const previousWeek = this.context.db.weeks.getCurrentWeek();
+				if (previousWeek) {
+					const previousSeeds = this.context.db.seeds.getSeedsByWeekId(previousWeek.id);
+
+					for (let seed of previousSeeds) {
+						if (seed.discord_message_id) {
+							await channel.messages.edit(seed.discord_message_id, { components: [] });
+						}
+					}
+				}
+
+				week.published_on = new Date();
+				const payload = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
 				const message = await channel.send(payload);
 				messages.push(message);
 				this.context.db.weeks.publishWeek(week.id, message.id);
@@ -293,9 +305,6 @@ export default class WeekCommand implements Command {
 					const seedMessage = await channel.send(seedPayload);
 					messages.push(seedMessage);
 					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
-					// if (seedMessage.crosspostable) {
-					// 	await seedMessage.crosspost();
-					// }
 				}
 				if (message.crosspostable) {
 					await message.crosspost();
