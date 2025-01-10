@@ -71,6 +71,16 @@ export default class SeedCommand implements Command {
 				.setRequired(true)
 			)
 		)
+		.addSubcommand(refresh => refresh
+			.setName("refresh")
+			.setDescription("Refreshes the discord message of a seed.")
+			.addIntegerOption(seed => seed
+				.setName("seed_id")
+				.setDescription("The internal id of the seed. Use autocomplete.")
+				.setAutocomplete(true)
+				.setRequired(true)
+			)
+		)
 
 	async execute(interaction: ChatInputCommandInteraction) {
 		switch (interaction.options.getSubcommand()) {
@@ -207,6 +217,19 @@ export default class SeedCommand implements Command {
 					}
 				}
 
+				break;
+			}
+
+			case 'refresh': {
+				const seed_id = interaction.options.getInteger('seed_id', true);
+				const seed = this.context.db.seeds.getSeed(seed_id);
+				if (!seed) {
+					await interaction.reply(`Could not find seed with id ${seed_id}`);
+					return;
+				}
+
+				await updateOrFetchMessageForSeed(seed, this.context, this.config);
+				await interaction.reply(`Refreshed discord message for seed ${seed_id} succesully.`);
 				break;
 			}
 		}
