@@ -55,6 +55,7 @@ const DEFAULT_QUERY = `SELECT
 			FROM player_scores x
 				JOIN players xp ON x.player_id = xp.id
 			WHERE x.seed_id = seed.id
+				AND x.player_id != player.id
 				AND x.url_type = 1
 				AND xp.in_game_name NOT NULL
 				AND (
@@ -71,7 +72,7 @@ const DEFAULT_QUERY = `SELECT
 					)
 					OR (
 						seed.game_type != 6
-						AND x.time_in_millis < score.time_in_millis
+						AND (score.time_in_millis ISNULL OR x.time_in_millis < score.time_in_millis)
 					)
 				)
 		)
