@@ -99,7 +99,7 @@ export default class CommandRegistry {
 						await commandDefs.score.command.handleModalSubmit(interaction);
 					}
 				} else if (interaction.isButton()) {
-					logInteraction('modal submit', interaction.customId);
+					logInteraction('button', interaction.customId);
 
 					if (interaction.customId.startsWith(SUBMIT_SCORE_ID)) {
 						await commandDefs.score.command.handleScoreSubmissionButtonClick(interaction);
