@@ -4,9 +4,11 @@ import { readFileSync } from "fs";
 export default class BotConfig {
 	public readonly logLevel: 'all' | 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'mark' | 'off';
 	public readonly twitchBingoStreamsChannel: string;
+	public readonly untrustedBingoStreamsChannel?: string;
 	public readonly weeklySeedsChannel: string;
-	public readonly logChannel: string;
-	public readonly errorLogChannel: string;
+	public readonly logChannel?: string;
+	public readonly errorLogChannel?: string;
+	public readonly interactionLogChannel?: string;
 	public readonly ownerGuild: string;
 	public readonly owner: string;
 	public readonly ssl?: SSLConfig;
@@ -18,8 +20,18 @@ export default class BotConfig {
 		this.logLevel = config.get('logLevel');
 		this.twitchBingoStreamsChannel = config.get('twitchBingoStreamsChannel');
 		this.weeklySeedsChannel = config.get('weeklySeedsChannel');
-		this.logChannel = config.get('logChannel');
-		this.errorLogChannel = config.get('errorLogChannel');
+		if (config.has('untrustedBingoStreamsChannel')) {
+			this.untrustedBingoStreamsChannel = config.get('untrustedBingoStreamsChannel');
+		}
+		if (config.has('logChannel')) {
+			this.logChannel = config.get('logChannel');
+		}
+		if (config.has('errorLogChannel')) {
+			this.errorLogChannel = config.get('errorLogChannel');
+		}
+		if (config.has('interactionLogChannel')) {
+			this.interactionLogChannel = config.get('interactionLogChannel');
+		}
 		this.ownerGuild = config.get('ownerGuild');
 		this.owner = config.get('owner');
 		this.discordToken = config.get('discordToken');

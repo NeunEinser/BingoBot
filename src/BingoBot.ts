@@ -32,20 +32,38 @@ export default class BingoBot {
 			const auth = new AppTokenAuthProvider(this.config.twitch.clientId, this.config.twitch.clientSecret);
 			const twitchClient = new ApiClient({authProvider: auth, });
 
-			const announcementChannel = (await this.client.channels.fetch(this.config.twitchBingoStreamsChannel)) as NewsChannel;
-			const logChannel = (await this.client.channels.fetch(this.config.logChannel)) as TextChannel;
-			const errorLogChannel = (await this.client.channels.fetch(this.config.errorLogChannel)) as TextChannel;
+			const announcementChannel = (await this.client.channels.fetch(this.config.twitchBingoStreamsChannel));
+			const logChannel = this.config.logChannel ? await this.client.channels.fetch(this.config.logChannel) : undefined;
+			const errorLogChannel = this.config.errorLogChannel ? await this.client.channels.fetch(this.config.errorLogChannel) : undefined;
+			const interactionLogChannel = this.config.interactionLogChannel ? await this.client.channels.fetch(this.config.interactionLogChannel) : undefined;
+			const untrustedStreamsChannel = this.config.untrustedBingoStreamsChannel ? await this.client.channels.fetch(this.config.untrustedBingoStreamsChannel) : undefined;
 			
+			const appenders: Record<string, log4js.Appender> = {
+				out: { type: 'stdout' },
+				file: { type: 'file', filename: `logs/${new Date().toISOString().replace(/[:.]/g, '_')}.log` },
+			}
+			const defaultAppenders = ['out', 'file' ]
+			const interactionAppendsers = []
+
+			if (logChannel) {
+				appenders.discord = { type: 'DiscordAppender', getChannel: () => logChannel };
+				defaultAppenders.push('discord');
+			}
+			if (errorLogChannel) {
+				appenders.discord_err = { type: 'DiscordAppender', getChannel: () => errorLogChannel };
+				appenders.discord_err_filter = { type: 'logLevelFilter', level: 'warn', appender: 'discord_err' };
+				defaultAppenders.push('discord_err_filter');
+			}
+			if (interactionLogChannel) {
+				appenders.discord_interaction = { type: 'DiscordAppender', getChannel: () => interactionLogChannel };
+				interactionAppendsers.push('discord_interaction');
+			}
+
 			log4js.configure({
-				appenders: {
-					out: { type: 'stdout' },
-					file: { type: 'file', filename: `logs/${new Date().toISOString().replace(/[:.]/g, '_')}.log` },
-					discord: { type: 'DiscordAppender', getChannel: () => logChannel },
-					discord_err: { type: 'DiscordAppender', getChannel: () => errorLogChannel },
-					discord_err_filter: { type: 'logLevelFilter', level: 'warn', appender: 'discord_err' },
-				},
+				appenders,
 				categories: {
-					default: { appenders: [ 'out', 'file', 'discord', 'discord_err_filter' ], level: this.config.logLevel },
+					default: { appenders: defaultAppenders, level: this.config.logLevel },
+					interaction: { appenders: [ ...defaultAppenders, ...interactionAppendsers ], level: this.config.logLevel }
 				}
 			});
 			this.logger.info('Initializing bot');
@@ -56,8 +74,12 @@ export default class BingoBot {
 
 			this.twitchListener.onTrustedBingoBroadcastWentLive(async stream => {
 				try {
-					await discordAnnouncer.sendStreamNotification(stream, announcementChannel);
-					await discordAnnouncer.sendStreamNotification(stream, logChannel, false, '(already trusted)');
+					if (announcementChannel?.isSendable() && !announcementChannel.isDMBased()) {
+						await discordAnnouncer.sendStreamNotification(stream, announcementChannel);
+					}
+					if (untrustedStreamsChannel?.isSendable() && !untrustedStreamsChannel.isDMBased()) {
+						await discordAnnouncer.sendStreamNotification(stream, untrustedStreamsChannel, false, '(already trusted)');
+					}
 				} catch (err) {
 					BingoBot.logger.error(err);
 				}
@@ -65,7 +87,9 @@ export default class BingoBot {
 			
 			this.twitchListener.onUntrustedBingoBroadcastWentLive(async stream => {
 				try {
-					await discordAnnouncer.sendStreamNotification(stream, logChannel, false, '(untrusted)');
+					if (untrustedStreamsChannel?.isSendable() && !untrustedStreamsChannel.isDMBased()) {
+						await discordAnnouncer.sendStreamNotification(stream, untrustedStreamsChannel, false, '(untrusted)');
+					}
 				} catch (err) {
 					BingoBot.logger.error(err);
 				}

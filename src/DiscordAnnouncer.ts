@@ -1,5 +1,5 @@
 import { HelixStream } from "@twurple/api";
-import { Client, MessageEditOptions, MessageCreateOptions, TextChannel, EmbedBuilder, Colors, NewsChannel, Message } from "discord.js";
+import { Client, MessageEditOptions, MessageCreateOptions, TextChannel, EmbedBuilder, Colors, Message, DMChannel, PartialDMChannel, PartialGroupDMChannel, SendableChannels } from "discord.js";
 import { existsSync, readFileSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import { get } from "https";
@@ -19,7 +19,7 @@ export default class DiscordAnnouncer {
 		}
 	}
 
-	public async sendStreamNotification(stream: HelixStream, channel: TextChannel | NewsChannel, trackMessage = true, logInfo = ''): Promise<void> {
+	public async sendStreamNotification(stream: HelixStream, channel: Exclude<SendableChannels, DMChannel | PartialDMChannel | PartialGroupDMChannel>, trackMessage = true, logInfo = ''): Promise<void> {
 		BingoBot.logger.debug(`Preparing Discord message for ${stream.userDisplayName} to ${channel.name}.`);
 		const user = await stream.getUser();
 		let image: string | null = stream.getThumbnailUrl(320, 180);

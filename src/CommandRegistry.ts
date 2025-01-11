@@ -10,6 +10,7 @@ import ScoreCommand from './discord_commands/score';
 import BotConfig from './BotConfig';
 import IgnCommand from './discord_commands/ign';
 import RestartCommand from './discord_commands/restart';
+import { getLogger } from 'log4js';
 
 export interface Command {
 	execute: (interaction: ChatInputCommandInteraction) => Promise<void>,
@@ -19,6 +20,7 @@ export interface Command {
 export const SUBMIT_SCORE_ID = 'submit_seed_score'
 
 export default class CommandRegistry {
+	private readonly logger = getLogger('interaction');
 	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
 
 	public async registerCommands(): Promise<void> {
@@ -42,8 +44,8 @@ export default class CommandRegistry {
 		await commandApi.set(Object.values(commandDefs).map(d => d.data.toJSON()));
 
 		this.context.discordClient.on(Events.InteractionCreate, async interaction => {
-			function logInteraction(type?: string, name?: string) {
-				BingoBot.logger.info(`Received ${type ?? 'unknown'} interaction${name ? ' for ' + name : ''}\n${JSON.stringify(
+			const logInteraction = (type?: string, name?: string) => {
+				this.logger.info(`Received ${type ?? 'unknown'} interaction${name ? ' for ' + name : ''} by ${interaction.user.displayName}\n${JSON.stringify(
 					{ ...interaction },
 					(key, value) => typeof value === 'bigint'
 						? value.toString()
@@ -60,7 +62,7 @@ export default class CommandRegistry {
 
 					const command = commandLookup[interaction.commandName]?.command;
 					if (!command) {
-						BingoBot.logger.error(`Could not find matching command definition for ${interaction.commandName}`);
+						this.logger.error(`Could not find matching command definition for ${interaction.commandName}`);
 						return;
 					}
 
@@ -72,13 +74,13 @@ export default class CommandRegistry {
 							interaction.respond([]);
 						}
 					} else {
-						BingoBot.logger.warn(`Command ${interaction.commandName} does not have an autocomplete script defined.`);
+						this.logger.warn(`Command ${interaction.commandName} does not have an autocomplete script defined.`);
 					}
 				} else if (interaction.isChatInputCommand()) {
 					logInteraction('command', interaction.commandName);
 					const command = commandLookup[interaction.commandName]?.command;
 					if (!command) {
-						BingoBot.logger.error(`Could not find matching command definition for ${interaction.commandName}`);
+						this.logger.error(`Could not find matching command definition for ${interaction.commandName}`);
 						return;
 					}
 
@@ -109,7 +111,7 @@ export default class CommandRegistry {
 				}
 			} catch (err) {
 				try {
-					BingoBot.logger.error(err);
+					this.logger.error(err);
 					if(interaction.isCommand()) {
 						if (interaction.replied || interaction.deferred) {
 							await interaction.followUp("Command execution failed");

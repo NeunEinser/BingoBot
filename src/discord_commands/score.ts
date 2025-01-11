@@ -5,6 +5,7 @@ import BotConfig from "../BotConfig";
 import { millisToTimeStamp, updateOrFetchMessageForSeed } from "../util/weekly_seeds";
 import { Seed } from "../repositories/SeedRepository";
 import { Player } from "../repositories/PlayerRepository";
+import { getLogger } from "log4js";
 
 interface ModalOptions {
 	include_ign?: boolean,
@@ -16,6 +17,7 @@ interface ModalOptions {
 }
 
 export default class ScoreCommand implements Command {
+	private readonly logger = getLogger('BingoBot');
 	private readonly failedModals: Map<number, Map<number, { timeout: NodeJS.Timeout, options: ModalOptions}>> = new Map();
 
 	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
@@ -395,6 +397,7 @@ export default class ScoreCommand implements Command {
 				}
 			});
 
+			this.logger.info(`Replying to ${interaction.user.displayName}: \n"${msg ?? 'Failed to submit score'}"`);
 			await interaction.reply({
 				content: msg ?? 'Failed to submit score',
 				ephemeral: true,
@@ -412,6 +415,7 @@ export default class ScoreCommand implements Command {
 					this.context.db.players.setIgn(interaction.user.id, ign);
 					player.in_game_name = ign;
 				} catch {
+					this.logger.error('Modal submit did not contain an in-game name even though it should have.');
 					await postError('Expected in-game name in submission.');
 					return;
 				}
@@ -560,12 +564,14 @@ export default class ScoreCommand implements Command {
 		)
 
 		if (!interaction.replied) {
+			this.logger.info(`Registered new score for ${interaction.user.displayName}.`);
 			await interaction.reply({ content: 'Successfully registered your score.', ephemeral});
 		}
 
 		try {
 			await updateOrFetchMessageForSeed(seed, this.context, this.config);
-		} catch {
+		} catch (err) {
+			this.logger.error(`Failed to refresh scoreboard for ${interaction.user.displayName}:\n${err}`);
 			await interaction.followUp({ content: 'Failed to refresh scoreboard.', ephemeral});
 		}
 		return { is_error: false };
