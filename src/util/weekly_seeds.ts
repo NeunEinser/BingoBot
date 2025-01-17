@@ -38,7 +38,7 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 				message += `-in-${seed.game_type_specific}-mins`;
 			}
 		} else {
-			message += 'practiced';
+			message += 'practice';
 		}
 
 		message += ` seed: ${seed.seed}`;
