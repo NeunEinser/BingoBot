@@ -2,7 +2,7 @@ import { ChatInputCommandInteraction, ModalSubmitInteraction, SlashCommandBuilde
 import { Command } from "../CommandRegistry";
 import Database from "../Database";
 import { BotContext } from "../BingoBot";
-import { updateOrFetchMessageForSeed } from "../util/weekly_seeds";
+import { constructAndUpdateSeedMessage } from "../util/weekly_seeds";
 import BotConfig from "../BotConfig";
 
 export default class IgnCommand implements Command {
@@ -46,7 +46,7 @@ export default class IgnCommand implements Command {
 
 		const scores = this.context.db.scores.getPlayerScoresByPlayer(player.id, 100);
 		for (let score of scores) {
-			await updateOrFetchMessageForSeed(score.seed, this.context, this.config);
+			await constructAndUpdateSeedMessage(score.seed, this.context, this.config);
 		}
 	}
 }

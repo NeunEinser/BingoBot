@@ -2,7 +2,7 @@ import { ActionRowBuilder, AutocompleteInteraction, ButtonBuilder, ButtonInterac
 import { Command, SUBMIT_SCORE_ID } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import BotConfig from "../BotConfig";
-import { millisToTimeStamp, updateOrFetchMessageForSeed } from "../util/weekly_seeds";
+import { millisToTimeStamp, constructAndUpdateSeedMessage } from "../util/weekly_seeds";
 import { Seed } from "../repositories/SeedRepository";
 import { Player } from "../repositories/PlayerRepository";
 import { getLogger } from "log4js";
@@ -192,7 +192,7 @@ export default class ScoreCommand implements Command {
 						await user_reply.followUp('Deleted submission successfully.');
 
 						try {
-							await updateOrFetchMessageForSeed(seed, this.context, this.config);
+							await constructAndUpdateSeedMessage(seed, this.context, this.config);
 						} catch {
 							await interaction.followUp('Failed to refresh scoreboard');
 						}
@@ -569,7 +569,7 @@ export default class ScoreCommand implements Command {
 		}
 
 		try {
-			await updateOrFetchMessageForSeed(seed, this.context, this.config);
+			await constructAndUpdateSeedMessage(seed, this.context, this.config);
 		} catch (err) {
 			this.logger.error(`Failed to refresh scoreboard for ${interaction.user.displayName}:\n${err}`);
 			await interaction.followUp({ content: 'Failed to refresh scoreboard.', ephemeral});

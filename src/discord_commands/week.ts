@@ -3,7 +3,7 @@ import { Command } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import SemVer from "../util/SemVer";
 import BotConfig from "../BotConfig";
-import { constructDiscordMessageAndUpdateIfExists, updateOrFetchMessageForSeed } from "../util/weekly_seeds";
+import { constructMessagesAndUpdateWeekMessage, constructDiscordMessages, constructSeedMessage } from "../util/weekly_seeds";
 
 export default class WeekCommand implements Command {
 	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
@@ -97,7 +97,7 @@ export default class WeekCommand implements Command {
 					await interaction.reply('Could not find week.');
 					return;
 				}
-				const msg = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
+				const msg = constructDiscordMessages(week, this.context, this.config);
 				await interaction.reply(msg.message);
 				for (let seedMsg of msg.seedMessages ?? []) {
 					await interaction.followUp(seedMsg);
@@ -115,24 +115,7 @@ export default class WeekCommand implements Command {
 					return;
 				}
 
-				await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
-				const seeds = this.context.db.seeds.getSeedsByWeekId(week.id);
-
-				const channel = await interaction.guild?.channels.fetch(this.config.weeklySeedsChannel);
-				if (!channel?.isTextBased()) {
-					await interaction.editReply('Could not get configured weekly seeds channel as text channel.');
-					return;
-				}
-				for (let seed of seeds) {
-					const seedPayload = await updateOrFetchMessageForSeed(seed, this.context, this.config);
-					if (!seed.discord_message_id) {
-						const seedMessage = await channel.send(seedPayload);
-						this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
-						// if (seedMessage.crosspostable) {
-						// 	await seedMessage.crosspost();
-						// }
-					}
-				}
+				await constructMessagesAndUpdateWeekMessage(week, this.context, this.config);
 
 				await interaction.editReply("Successfully refreshed current week.");
 				break;
@@ -146,7 +129,8 @@ export default class WeekCommand implements Command {
 	async autocomplete(interaction: AutocompleteInteraction) {
 		const focused = interaction.options.getFocused(true);
 		switch (focused.name) {
-			case 'week': {
+			case 'week':
+			case 'week_id': {
 				if (interaction.options.getSubcommand() == "add") {
 					const nextNumber = this.context.db.weeks.getNextWeekNumber();
 
@@ -156,10 +140,6 @@ export default class WeekCommand implements Command {
 						return [];
 					}
 				}
-				const weeks = this.context.db.weeks.getUnpublishedFilteredWeeks(focused.value, 25);
-				return weeks.map(w => ({ name: w.week.toString(), value: w.week }));
-			}
-			case 'week_id': {
 				const weeks = this.context.db.weeks.getFilteredWeeks(focused.value, 25);
 				return weeks.map(w => ({ name: `${w.week} (${w.published_on
 					? 'published on: ' + w.published_on.toISOString().split('T')[0]
@@ -297,14 +277,14 @@ export default class WeekCommand implements Command {
 				}
 
 				week.published_on = new Date();
-				const payload = await constructDiscordMessageAndUpdateIfExists(week, this.context, this.config);
+				const payload = constructDiscordMessages(week, this.context, this.config);
 				const message = await channel.send(payload.message);
 				messages.push(message);
 				this.context.db.weeks.publishWeek(week.id, message.id);
 				const seeds = this.context.db.seeds.getSeedsByWeekId(week.id);
 
 				for (let seed of seeds) {
-					const seedPayload = await updateOrFetchMessageForSeed(seed, this.context, this.config);
+					const seedPayload = constructSeedMessage(seed, this.context, this.config);
 					const seedMessage = await channel.send(seedPayload);
 					messages.push(seedMessage);
 					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);

@@ -3,7 +3,7 @@ import { Command } from "../CommandRegistry";
 import { BotContext } from "../BingoBot";
 import { GAME_TYPES } from "../repositories/SeedRepository";
 import BotConfig from "../BotConfig";
-import { constructDiscordMessageAndUpdateIfExists, updateOrFetchMessageForSeed } from "../util/weekly_seeds";
+import { constructMessagesAndUpdateWeekMessage, constructAndUpdateSeedMessage } from "../util/weekly_seeds";
 
 const SEED_TYPES = [
 	'bingo',
@@ -130,7 +130,7 @@ export default class SeedCommand implements Command {
 						await interaction.reply('Could not get configured weekly seeds channel as text channel.');
 						return;
 					}
-					const seedPayload = await updateOrFetchMessageForSeed(seed, this.context, this.config);
+					const seedPayload = await constructAndUpdateSeedMessage(seed, this.context, this.config);
 					const seedMessage = await channel.send(seedPayload);
 					this.context.db.seeds.publishSeed(seed.id, seedMessage.id);
 					// if (seedMessage.crosspostable) {
@@ -206,7 +206,7 @@ export default class SeedCommand implements Command {
 								}
 								this.context.db.seeds.deleteSeed(seed.id);
 								await user_reply.followUp('Deleted seed and submitted scores successfully.');
-								await constructDiscordMessageAndUpdateIfExists(seed.week, this.context, this.config);
+								await constructMessagesAndUpdateWeekMessage(seed.week, this.context, this.config);
 							})
 							
 						}
@@ -228,7 +228,7 @@ export default class SeedCommand implements Command {
 					return;
 				}
 
-				await updateOrFetchMessageForSeed(seed, this.context, this.config);
+				await constructAndUpdateSeedMessage(seed, this.context, this.config);
 				await interaction.reply(`Refreshed discord message for seed ${seed_id} succesully.`);
 				break;
 			}

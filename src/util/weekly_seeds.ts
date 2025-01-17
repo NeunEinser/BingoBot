@@ -6,7 +6,7 @@ import { Seed } from "../repositories/SeedRepository";
 import { Week } from "../repositories/WeekRepository";
 import { SUBMIT_SCORE_ID } from "../CommandRegistry";
 
-export async function constructDiscordMessageAndUpdateIfExists(week: Week, context: BotContext, config: BotConfig): Promise<{ message: BaseMessageOptionsWithPoll, seedMessages?: BaseMessageOptionsWithPoll[] }> {
+export function constructDiscordMessages(week: Week, context: BotContext, config: BotConfig): { message: BaseMessageOptionsWithPoll, seedMessages: BaseMessageOptionsWithPoll[] } {
 	const fetchrVersionStr = week.version.toString() + (week.max_version ? '-' + week.max_version.toString() : '');
 	const mcVersionStr = week.mc_version.toString() + (week.max_mc_version ? '-' + week.max_mc_version.toString() : '');
 	const seeds = context.db.seeds.getSeedsByWeekId(week.id);
@@ -49,14 +49,10 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 	}
 
 	message += `\nhttp://www.playminecraftbingo.com/fetchr-weekly-seeds/${week.week}`
-	let seedMessages = undefined;
-
-	if (!week.published_on && !week.discord_message_id) {
-		seedMessages = [];
-		for (let seed of seeds) {
-			if (!seed.discord_message_id) {
-				seedMessages.push(await updateOrFetchMessageForSeed(seed, context, config));
-			}
+	const seedMessages = [];
+	for (let seed of seeds) {
+		if (!seed.discord_message_id) {
+			seedMessages.push(constructSeedMessage(seed, context, config));
 		}
 	}
 
@@ -64,17 +60,23 @@ export async function constructDiscordMessageAndUpdateIfExists(week: Week, conte
 		content: message.trim().substring(0, 2000),
 	};
 
-	if (week.discord_message_id) {
-		const channel = await context.discordClient.channels.fetch(config.weeklySeedsChannel);
-		if (channel?.isTextBased()) {
-			await channel.messages.edit(week.discord_message_id, messageOptions);
-		}
-	}
-
 	return { message: messageOptions, seedMessages };
 }
 
-export async function updateOrFetchMessageForSeed(seed: Seed, context: BotContext, config: BotConfig): Promise<BaseMessageOptionsWithPoll> {
+export async function constructMessagesAndUpdateWeekMessage(week: Week, context: BotContext, config: BotConfig): Promise<{ message: BaseMessageOptionsWithPoll, seedMessages: BaseMessageOptionsWithPoll[] }> {
+	const message = constructDiscordMessages(week, context, config);
+
+	if (week.discord_message_id) {
+		const channel = await context.discordClient.channels.fetch(config.weeklySeedsChannel);
+		if (channel?.isTextBased()) {
+			await channel.messages.edit(week.discord_message_id, message.message);
+		}
+	}
+
+	return message;
+}
+
+export function constructSeedMessage(seed: Seed, context: BotContext, config: BotConfig): BaseMessageOptionsWithPoll {
 	let message = '';
 
 	message += `**${seed.seed}** (${seed.practiced ? 'practiced' : 'blind'} ${seed.game_type.replace('_', '-')}`;
@@ -158,14 +160,20 @@ export async function updateOrFetchMessageForSeed(seed: Seed, context: BotContex
 		components: [btnRow],
 	};
 
+	return messageOptions;
+}
+
+export async function constructAndUpdateSeedMessage(seed: Seed, context: BotContext, config: BotConfig): Promise<BaseMessageOptionsWithPoll> {
+	const message = constructSeedMessage(seed, context, config);
+
 	if (seed.discord_message_id) {
 		const channel = await context.discordClient.channels.fetch(config.weeklySeedsChannel);
 		if (channel?.isTextBased()) {
-			await channel.messages.edit(seed.discord_message_id, messageOptions);
+			await channel.messages.edit(seed.discord_message_id, message);
 		}
 	}
 
-	return messageOptions;
+	return message;
 }
 
 export function millisToTimeStamp(millis: number | null) {
