@@ -51,9 +51,7 @@ export function constructDiscordMessages(week: Week, context: BotContext, config
 	message += `\nhttp://www.playminecraftbingo.com/fetchr-weekly-seeds/${week.week}`
 	const seedMessages = [];
 	for (let seed of seeds) {
-		if (!seed.discord_message_id) {
-			seedMessages.push(constructSeedMessage(seed, context, config));
-		}
+		seedMessages.push(constructSeedMessage(seed, context, config));
 	}
 
 	const messageOptions: BaseMessageOptionsWithPoll = {
