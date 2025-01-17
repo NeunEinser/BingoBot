@@ -144,7 +144,7 @@ export default class WeekCommand implements Command {
 				return weeks.map(w => ({ name: `${w.week} (${w.published_on
 					? 'published on: ' + w.published_on.toISOString().split('T')[0]
 					: 'not published'
-				}) (id: ${w.id})`, value: w.id }));
+				}) (id: ${w.id})`, value: focused.name === 'week' ? w.week : w.id }));
 			}
 			case 'fetchr_version':
 			case 'max_fetchr_version':
