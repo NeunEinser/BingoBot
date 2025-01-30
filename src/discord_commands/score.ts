@@ -252,7 +252,7 @@ export default class ScoreCommand implements Command {
 			(this.failedModals.get(seed.id)?.get(player?.id ?? -1))?.options ?? {
 				include_ign: !player?.in_game_name,
 				points: score?.points,
-				time: score && (seed.game_type !== 'points' || score.time_in_millis) ? millisToTimeStamp(score.time_in_millis) : null,
+				time: score && (seed.game_type !== 'points' || score.time_in_millis) ? millisToTimeStamp(score.time_in_millis, true) : null,
 				image_url: score?.url_type === 'image' ? score.url : null,
 				video_url: score?.url_type === 'video' ? score.url : null,
 				description: score?.description,

@@ -174,14 +174,21 @@ export async function constructAndUpdateSeedMessage(seed: Seed, context: BotCont
 	return message;
 }
 
-export function millisToTimeStamp(millis: number | null) {
+export function millisToTimeStamp(millis: number | null, exact = false) {
 	if (!millis) {
 		return 'DNF';
 	}
-	let cur = Math.floor(millis / 10);
-	let result = '.' + (cur % 100).toString().padStart(2, '0');
-	cur -= cur % 100;
-	cur /= 100;
+	const partialUpperBound = exact ? 1000 : 100;
+	let cur = exact ? millis : Math.floor(millis / 10);
+	let result = '.' + (cur % partialUpperBound).toString().padStart(exact ? 3 : 2, '0');
+	cur -= cur % partialUpperBound;
+	cur /= partialUpperBound;
+
+	if (exact) {
+		while (result.endsWith('0') || result.endsWith('.')) {
+			result = result.substring(0, result.length - 1);
+		}
+	}
 
 	result = (cur % 60) + result;
 	if (cur >= 60) {
