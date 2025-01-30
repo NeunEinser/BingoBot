@@ -17,7 +17,7 @@ interface ModalOptions {
 }
 
 export default class ScoreCommand implements Command {
-	private readonly logger = getLogger('BingoBot');
+	private readonly logger = getLogger('interaction');
 	private readonly failedModals: Map<number, Map<number, { timeout: NodeJS.Timeout, options: ModalOptions}>> = new Map();
 
 	constructor(private readonly context: BotContext, private readonly config: BotConfig) {}
