@@ -541,11 +541,13 @@ export default class ScoreCommand implements Command {
 			time_in_millis *= 1000;
 			let partial = partial_split.length === 2 ? parseInt(partial_split[1]) : 0;
 			if (partial !== 0) {
-				if (partial < 10) {
-					partial *= 10
-				}
-				if (partial < 100) {
-					partial *= 10
+				switch (partial_split[1].length) {
+					case 1:
+						partial *= 100;
+						break;
+					case 2:
+						partial *= 10;
+						break;
 				}
 			}
 			time_in_millis += partial;

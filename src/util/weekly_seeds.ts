@@ -179,10 +179,7 @@ export function millisToTimeStamp(millis: number | null) {
 		return 'DNF';
 	}
 	let cur = Math.floor(millis / 10);
-	let result = '';
-	if (cur % 100 !== 0) {
-		result = '.' + cur % 100;
-	}
+	let result = '.' + (cur % 100).toString().padStart(2, '0');
 	cur -= cur % 100;
 	cur /= 100;
 
