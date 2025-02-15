@@ -1,6 +1,6 @@
 import { ApiClient, HelixStream, HelixUser } from '@twurple/api';
 import { rawDataSymbol } from '@twurple/common';
-import { EventSubChannelUpdateEvent, EventSubSubscription } from '@twurple/eventsub-base';
+import { EventSubChannelUpdateEvent, EventSubStreamOnlineEvent, EventSubSubscription } from '@twurple/eventsub-base';
 import { DirectConnectionAdapter, EventSubHttpListener } from '@twurple/eventsub-http';
 import { NgrokAdapter } from '@twurple/eventsub-ngrok';
 import { EventEmitter } from 'events';
@@ -112,14 +112,8 @@ export default class TwitchStreamListener {
 	}
 
 	private addBroadcasterInternal(userId: string) {
-		const onlineSub = this.listener.onStreamOnline(userId, async event => {
-			const stream = await event.getStream();
-			if (stream === null) {
-				BingoBot.logger.error(`Received stream online event for ${event.broadcasterDisplayName} (${event.broadcasterId}), but could not fetch stream data.`);
-				return;
-			}
-			BingoBot.logger.info(`Received stream online event for ${event.broadcasterDisplayName} (${event.broadcasterId}): "${stream.title}" (playing ${stream.gameName}/${stream.gameId}).`);
-			this.handleStream(stream);
+		const onlineSub = this.listener.onStreamOnline(userId, event => {
+			this.onStreamOnline(userId, event, 1);
 		});
 
 		const offlineSub = this.listener.onStreamOffline(userId, async event => {
@@ -127,6 +121,22 @@ export default class TwitchStreamListener {
 			this.handleStreamOffline(event.broadcasterId);
 		});
 		this.trustedBroadcasters.set(userId, {streamOnlineSub: onlineSub, streamOfflineSub: offlineSub});
+	}
+
+	private async onStreamOnline(userId: string, event: EventSubStreamOnlineEvent, retry: number) {
+		const stream = await event.getStream();
+		if (stream === null) {
+			if (retry <= 10) {
+				BingoBot.logger.info(`Received stream online event for ${event.broadcasterDisplayName} (${event.broadcasterId}), but could not fetch stream data, retrying...`);
+				await new Promise(r => setTimeout(r, 100 * retry));
+				await this.onStreamOnline(userId, event, retry + 1);
+			} else {
+				BingoBot.logger.error(`Received stream online event for ${event.broadcasterDisplayName} (${event.broadcasterId}), but could not fetch stream data after 10 retries.`);
+			}
+			return;
+		}
+		BingoBot.logger.info(`Received stream online event for ${event.broadcasterDisplayName} (${event.broadcasterId}): "${stream.title}" (playing ${stream.gameName}/${stream.gameId}).`);
+		this.handleStream(stream);
 	}
 
 	/**
