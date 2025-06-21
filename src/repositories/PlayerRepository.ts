@@ -1,10 +1,14 @@
-import { DatabaseSync, StatementSync } from "node:sqlite";
+import { DatabaseSync, SQLOutputValue, StatementSync } from "node:sqlite";
+import { mapTo, type TypeMap } from "../util/type_utils";
 
 export interface Player {
 	id: number;
 	in_game_name: string;
 	discord_id: string;
 }
+
+const PLAYER_TYPE_MAP = Object.freeze(
+	{ id: [ 'number' ], in_game_name: [ 'string' ], discord_id: [ 'string' ] } satisfies TypeMap<Player>);
 
 export default class PlayerRepository {
 	
@@ -38,19 +42,11 @@ export default class PlayerRepository {
 	}
 
 	public getPlayer(id: number) {
-		const result = this.getPlayerQuery.all(id) as Player[];
-		if (result.length === 0) {
-			return null;
-		}
-		return result[0];
+		return PlayerRepository.mapPlayer(this.getPlayerQuery.get(id));
 	}
 
 	public getPlayerByDiscordId(discord_id: string) {
-		const result = this.getPlayerByDiscordIdQuery.all(discord_id) as Player[];
-		if (result.length === 0) {
-			return null;
-		}
-		return result[0];
+		return PlayerRepository.mapPlayer(this.getPlayerByDiscordIdQuery.get(discord_id));
 	}
 
 	public createPlayer(discord_id: string, in_game_name?: string | null) {
@@ -59,5 +55,9 @@ export default class PlayerRepository {
 
 	public setIgn(discord_id: string, in_game_name: string) {
 		this.setIgnQuery.run(in_game_name, discord_id);
+	}
+
+	public static mapPlayer(raw: Record<string, SQLOutputValue> | undefined | null, prefix: string = '') {
+		return mapTo<Player>(raw, PLAYER_TYPE_MAP, prefix) as Player | null
 	}
 }

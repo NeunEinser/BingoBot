@@ -1,6 +1,7 @@
-import { DatabaseSync, StatementSync, SupportedValueType } from "node:sqlite";
+import { DatabaseSync, StatementSync } from "node:sqlite";
 import SeedRepository, { Seed } from "./SeedRepository";
-import { Player } from "./PlayerRepository";
+import PlayerRepository, { Player } from "./PlayerRepository";
+import { createMapper, filterMap, TypeMap } from "../util/type_utils";
 
 const URL_TYPES = Object.freeze(
 	['image', 'video'] as const
@@ -8,44 +9,57 @@ const URL_TYPES = Object.freeze(
 
 export type UrlType = (typeof URL_TYPES)[number]
 
+// export interface RawScore {
+// 	rank: number | null;
+// 	seed__id: number;
+// 	seed__seed: number;
+// 	seed__game_type: number,
+// 	seed__game_type_specific: string | number | bigint | null;
+// 	seed__description: string | null;
+// 	seed__week__id: number,
+// 	seed__week__week: number;
+// 	seed__week__version: string;
+// 	seed__week__max_version: string | null;
+// 	seed__week__mc_version: string;
+// 	seed__week__max_mc_version: string | null;
+// 	seed__week__published_on_unix_millis?: number | null;
+// 	seed__week__discord_message_id: string | null;
+// 	seed__week__description: string | null;
+// 	player__id: number;
+// 	player__in_game_name: string;
+// 	player__discord_id: string;
+// 	points: number | null;
+// 	time_in_millis: number | null;
+// 	url_type: number;
+// 	url: string;
+// 	submitted_at: number;
+// 	description: string | null;
+// }
+
 export interface Score {
 	rank: number | null;
 	seed: Seed;
 	player: Player;
 	points: number | null;
 	time_in_millis: number | null;
-	url_type: UrlType;
-	url: string;
+	url_type: UrlType | null;
+	url: string | null;
 	submitted_at: Date;
 	description: string | null;
 }
 
-export interface RawScore {
-	rank: number | null;
-	seed__id: number;
-	seed__seed: number;
-	seed__game_type: number,
-	seed__game_type_specific: SupportedValueType;
-	seed__description: string | null;
-	seed__week__id: number,
-	seed__week__week: number;
-	seed__week__version: string;
-	seed__week__max_version: string | null;
-	seed__week__mc_version: string;
-	seed__week__max_mc_version: string | null;
-	seed__week__published_on_unix_millis?: number | null;
-	seed__week__discord_message_id: string | null;
-	seed__week__description: string | null;
-	player__id: number;
-	player__in_game_name: string;
-	player__discord_id: string;
-	points: number | null;
-	time_in_millis: number | null;
-	url_type: number;
-	url: string;
-	submitted_at: number;
-	description: string | null;
-}
+const SCORE_TYPE_MAP = Object.freeze(
+	{
+		rank: [ 'number', 'null' ],
+		seed: [ (raw, prefix) => SeedRepository.mapSeed(raw, prefix) ],
+		player: [ (raw, prefix) => PlayerRepository.mapPlayer(raw, prefix) ],
+		points: [ 'number', 'null' ],
+		time_in_millis: [ 'number', 'null' ],
+		url_type: [ (v) => (typeof v === 'number') ? (URL_TYPES[v] ?? null) : null, 'null' ],
+		url: [ 'string', 'null' ],
+		submitted_at: [ 'Date' ],
+		description: [ 'string', 'null' ],
+	} satisfies TypeMap<Score>);
 
 const DEFAULT_QUERY = `SELECT
 	CASE
@@ -102,7 +116,7 @@ const DEFAULT_QUERY = `SELECT
 	max_mc_version.major || '.' || max_mc_version.minor || '.' || max_mc_version.patch seed__week__max_mc_version,
 	week.published_on_unix_millis seed__week__published_on_unix_millis,
 	week.discord_message_id seed__week__discord_message_id,
-	week.description seed__week__desription
+	week.description seed__week__description
 FROM player_scores score
 	JOIN players player ON score.player_id = player.id
 	JOIN seeds seed ON score.seed_id = seed.id
@@ -153,26 +167,19 @@ export default class ScoreRepository {
 	}
 
 	public getPlayerScore(player_id: number, seed_id: number) {
-		const result = this.getPlayerScoreQuery.all(player_id, seed_id) as RawScore[];
-		if (result.length === 0) {
-			return null;
-		}
-		return ScoreRepository.decodeRawScore(result[0]);
+		return ScoreRepository.mapScore(this.getPlayerScoreQuery.get(player_id, seed_id));
 	}
 
 	public getPlayerScoresByPlayer(player_id: number, maxResults: number) {
-		const result = this.getPlayerScoresByPlayerQuery.all(player_id, maxResults) as RawScore[];
-		return result.map(ScoreRepository.decodeRawScore);
+		return filterMap(this.getPlayerScoresByPlayerQuery.all(player_id, maxResults), ScoreRepository.mapScore);
 	}
 
 	public getPlayerScoresByPlayerAndWeek(player_id: number, week_id: number, maxResults: number) {
-		const result = this.getPlayerScoresByPlayerAndWeekQuery.all(player_id, week_id, maxResults) as RawScore[];
-		return result.map(ScoreRepository.decodeRawScore);
+		return filterMap(this.getPlayerScoresByPlayerAndWeekQuery.all(player_id, week_id, maxResults), ScoreRepository.mapScore);
 	}
 
 	public getPlayerScoresBySeed(seed_id: number, maxResults: number) {
-		const result = this.getPlayerScoresBySeedQuery.all(seed_id, maxResults) as RawScore[];
-		return result.map(ScoreRepository.decodeRawScore);
+		return filterMap(this.getPlayerScoresBySeedQuery.all(seed_id, maxResults), ScoreRepository.mapScore);
 	}
 
 	public createOrUpdatePlayerScore(seed_id: number, player_id: number, points: number | null, time_in_millis: number | null, url_type?: UrlType | null, url?: string | null, description?: string | null) {
@@ -190,28 +197,6 @@ export default class ScoreRepository {
 	public deleteScore(player_id: number, seed_id: number) {
 		this.deletePlayerScoreQuery.run(player_id, seed_id);
 	}
-	
-	public static decodeRawScore(raw: RawScore) {
-		const raw_seed: any = {}
-		const seed_keys = Object.keys(raw).filter(k => k.startsWith('seed__')) as (keyof RawScore)[];
-		const clean_raw: Partial<RawScore> = raw;
-		for (let key of seed_keys) {
-			raw_seed[key.substring(6)] = raw[key];
-			clean_raw[key] = undefined;
-		}
-		const player: any = {};
-		const player_keys = Object.keys(raw).filter(k => k.startsWith('player__')) as (keyof RawScore)[];
-		for (let key of player_keys) {
-			player[key.substring(8)] = raw[key];
-			clean_raw[key] = undefined;
-		}
 
-		return {
-			...clean_raw,
-			url_type: URL_TYPES[raw.url_type],
-			submitted_at: new Date(raw.submitted_at * 1000),
-			player: player,
-			seed: SeedRepository.decodeRawSeed(raw_seed),
-		} as Score;
-	}
+	public static mapScore = createMapper<Score>(SCORE_TYPE_MAP);
 }

@@ -1,6 +1,7 @@
 import { DatabaseSync, StatementSync } from "node:sqlite";
 import VersionRepository from "./VersionRepository";
 import SemVer from "../util/SemVer";
+import { createMapper, filterMap, TypeMap } from "../util/type_utils";
 
 const DEFAULT_QUERY = `SELECT week.id,
 	week.week,
@@ -17,18 +18,6 @@ FROM weeks week
 	LEFT JOIN versions max_version ON week.max_version_id = max_version.id
 	LEFT JOIN minecraft_versions max_mc_version ON week.max_minecraft_version_id = max_mc_version.id`
 
-export interface RawWeek {
-	id: number;
-	week: number;
-	version: string;
-	max_version: string | null;
-	mc_version: string;
-	max_mc_version: string | null;
-	published_on_unix_millis?: number | null;
-	discord_message_id: string | null;
-	description: string | null;
-}
-
 export interface Week {
 	id: number;
 	week: number;
@@ -40,6 +29,19 @@ export interface Week {
 	discord_message_id: string | null;
 	description: string | null;
 }
+
+const WEEK_TYPE_MAP = Object.freeze(
+	{
+		id: [ 'number' ],
+		week: [ 'number' ],
+		version: [ 'SemVer' ],
+		max_version: [ 'SemVer', 'null' ],
+		mc_version: [ 'SemVer' ],
+		max_mc_version: [ 'SemVer', 'null' ],
+		published_on: [ 'Date', 'null' ],
+		discord_message_id: [ 'string', 'null' ],
+		description: [ 'string', 'null' ],
+	} satisfies TypeMap<Week>);
 
 export default class WeekRepository {
 	private readonly getWeekQuery: StatementSync;
@@ -111,49 +113,32 @@ export default class WeekRepository {
 	}
 
 	public getWeek(week_id: number) {
-		const result = this.getWeekQuery.all(week_id) as RawWeek[];
-		if (result.length > 0) {
-			return WeekRepository.decodeRawWeek(result[0]);
-		}
-
-		return null;
+		return WeekRepository.mapWeek(this.getWeekQuery.get(week_id));
 	}
 
 	public getCurrentWeek() {
-		const result = this.getCurrentWeekQuery.all() as RawWeek[];
-		if (result.length > 0) {
-			return WeekRepository.decodeRawWeek(result[0]);
-		}
-
-		return null;
+		return WeekRepository.mapWeek(this.getCurrentWeekQuery.get());
 	}
 
 	public getNextWeekNumber() {
-		const result = this.getNextWeekNumberQuery.all() as {value: number}[];
-		if (result.length > 0) {
-			return result[0].value;
+		const result = this.getNextWeekNumberQuery.get();
+		if (result && typeof result["value"] == "number") {
+			return result["value"]
 		}
 
 		return 1;
 	}
 
 	public getWeekByWeekNumber(week: number) {
-		const result = this.getWeekByWeekNumberQuery.all(week) as RawWeek[];
-		if (result.length > 0) {
-			return WeekRepository.decodeRawWeek(result[0]);
-		}
-
-		return null;
+		return WeekRepository.mapWeek(this.getWeekByWeekNumberQuery.get(week));
 	}
 
 	public getUnpublishedFilteredWeeks(weekFilter: string, maxResults: number) {
-		const result = this.getUnpublishedFilteredWeeksQuery.all(weekFilter, maxResults) as RawWeek[];
-		return result.map(r => WeekRepository.decodeRawWeek(r));
+		return filterMap(this.getUnpublishedFilteredWeeksQuery.all(weekFilter, maxResults), WeekRepository.mapWeek)
 	}
 
 	public getFilteredWeeks(weekStart: string, maxResults: number) {
-		const result = this.getFilteredWeeksQuery.all(weekStart, maxResults) as RawWeek[];
-		return result.map(r => WeekRepository.decodeRawWeek(r));
+		return filterMap(this.getFilteredWeeksQuery.all(weekStart, maxResults), WeekRepository.mapWeek)
 	}
 
 
@@ -174,16 +159,5 @@ export default class WeekRepository {
 		this.deleteWeekQuery.run(week_id);
 	}
 
-	public static decodeRawWeek(raw: RawWeek): Week {
-		const published_on_unix_millis = raw.published_on_unix_millis;
-		raw.published_on_unix_millis = undefined;
-		return {
-			...raw,
-			version: SemVer.fromString(raw.version),
-			max_version: raw.max_version ? SemVer.fromString(raw.max_version) : null,
-			mc_version: SemVer.fromString(raw.mc_version),
-			max_mc_version: raw.max_mc_version ? SemVer.fromString(raw.max_mc_version) : null,
-			published_on: published_on_unix_millis ? new Date(published_on_unix_millis) : null,
-		}
-	}
+	public static mapWeek = createMapper<Week>(WEEK_TYPE_MAP);
 }

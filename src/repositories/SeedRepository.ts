@@ -1,5 +1,6 @@
-import { DatabaseSync, StatementSync, SupportedValueType } from "node:sqlite";
+import { DatabaseSync, StatementSync } from "node:sqlite";
 import WeekRepository, { Week } from "./WeekRepository";
+import { createMapper, filterMap, TypeMap } from "../util/type_utils";
 
 const DEFAULT_QUERY = `SELECT seed.id,
 	seed.seed,
@@ -16,7 +17,7 @@ const DEFAULT_QUERY = `SELECT seed.id,
 	max_mc_version.major || '.' || max_mc_version.minor || '.' || max_mc_version.patch week__max_mc_version,
 	week.published_on_unix_millis week__published_on_unix_millis,
 	week.discord_message_id week__discord_message_id,
-	week.description week__desription
+	week.description week__description
 FROM seeds seed
 	JOIN weeks week ON seed.week_id = week.id
 	JOIN versions version ON week.version_id = version.id
@@ -36,35 +37,28 @@ export const GAME_TYPES = Object.freeze([
 
 export type GameType = (typeof GAME_TYPES)[number]
 
-export interface RawSeed {
-	id: number;
-	seed: number;
-	practiced: number;
-	game_type: number;
-	game_type_specific: SupportedValueType;
-	discord_message_id: string | null;
-	description: string | null;
-	week__id: number,
-	week__week: number;
-	week__version: string;
-	week__max_version: string | null;
-	week__mc_version: string;
-	week__max_mc_version: string | null;
-	week__published_on_unix_millis?: number | null;
-	week__discord_message_id: string | null;
-	week__description: string | null;
-}
-
 export interface Seed {
 	id: number;
 	seed: number;
 	practiced: boolean;
 	game_type: GameType,
-	game_type_specific: SupportedValueType,
+	game_type_specific: string | number | bigint | null;
 	discord_message_id: string | null;
 	description: string | null;
 	week: Week;
 }
+
+const SEED_TYPE_MAP = Object.freeze(
+	{
+		id: [ 'number' ],
+		seed: [ 'number' ],
+		practiced: [ 'boolean' ],
+		game_type: [ (v) => (typeof v === 'number') ? (GAME_TYPES[v] ?? null) : null ],
+		game_type_specific: [ 'string', 'number', 'bigint', 'null' ],
+		discord_message_id: [ 'string', 'null' ],
+		description: [ 'string', 'null' ],
+		week: [ (raw, prefix) => WeekRepository.mapWeek(raw, prefix) ],
+	} satisfies TypeMap<Seed>);
 
 export default class SeedRepository {
 	private readonly getSeedQuery: StatementSync;
@@ -111,42 +105,31 @@ export default class SeedRepository {
 		this.publishSeedQuery = db.prepare(`
 			UPDATE seeds
 			SET discord_message_id = ?
-			WHERE id = ? AND discord_message_id ISNULL
+			WHERE id = ?
 		`);
 	}
 
 	public getSeed(id: number) {
-		const result = this.getSeedQuery.all(id);
-		if (result.length === 0) {
-			return null;
-		}
-		return SeedRepository.decodeRawSeed(result[0] as RawSeed);
+		return SeedRepository.mapSeed(this.getSeedQuery.get(id));
 	}
 
 	public getSeedBySeedNumberAndWeek(seed: number, week_id: number) {
-		const result = this.getSeedBySeedNumberAndWeekQuery.all(seed, week_id);
-		if (result.length === 0) {
-			return null;
-		}
-		return SeedRepository.decodeRawSeed(result[0] as RawSeed);
+		return SeedRepository.mapSeed(this.getSeedBySeedNumberAndWeekQuery.get(seed, week_id));
 	}
 
 	public getSeedsByWeekId(week_id: number) {
-		return (this.getSeedsByWeekIdQuery.all(week_id) as RawSeed[])
-			.map(SeedRepository.decodeRawSeed);
+		return filterMap(this.getSeedsByWeekIdQuery.all(week_id), SeedRepository.mapSeed);
 	}
 
 	public getFilteredSeeds(seedFilter: string, limit: number) {
-		return (this.getFilteredSeedsQuery.all({ filter: seedFilter, limit: limit}) as RawSeed[])
-			.map(SeedRepository.decodeRawSeed);
+		return filterMap(this.getFilteredSeedsQuery.all({ filter: seedFilter, limit: limit}), SeedRepository.mapSeed);
 	}
 
 	public getFilteredSeedsByWeek(seedFilter: string, week_id: number, maxResults: number) {
-		return (this.getFilteredSeedsByWeekQuery.all(seedFilter, week_id, maxResults) as RawSeed[])
-			.map(SeedRepository.decodeRawSeed);
+		return filterMap(this.getFilteredSeedsByWeekQuery.all(seedFilter, week_id, maxResults), SeedRepository.mapSeed);
 	}
 
-	public createSeed(week_id: number, seed: number, game_type: GameType, practiced: boolean = false, game_type_specific?: SupportedValueType, description?: string | null) {
+	public createSeed(week_id: number, seed: number, game_type: GameType, practiced: boolean = false, game_type_specific?: string | number | bigint | null, description?: string | null) {
 		this.createSeedQuery.run(
 			week_id,
 			seed,
@@ -165,20 +148,5 @@ export default class SeedRepository {
 		this.deleteSeedQuery.run(id);
 	}
 
-	public static decodeRawSeed(raw: RawSeed) {
-		const raw_week: any = {}
-		const week_keys = Object.keys(raw).filter(k => k.startsWith('week__')) as (keyof RawSeed)[]
-		const clean_raw: Partial<RawSeed> = raw;
-		for (let key of week_keys) {
-			raw_week[key.substring(6)] = raw[key];
-			clean_raw[key] = undefined;
-		}
-
-		return {
-			...clean_raw,
-			game_type: GAME_TYPES[raw.game_type],
-			practiced: raw.practiced === 1,
-			week: WeekRepository.decodeRawWeek(raw_week),
-		} as Seed;
-	}
+	public static mapSeed = createMapper<Seed>(SEED_TYPE_MAP);
 }

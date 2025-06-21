@@ -1,5 +1,6 @@
 import { DatabaseSync, StatementSync } from "node:sqlite";
 import SemVer from "../util/SemVer";
+import { filterMap } from "../util/type_utils";
 
 export default class VersionRepository {
 	private readonly getVersionIdBySemVerQuery: StatementSync;
@@ -51,9 +52,9 @@ export default class VersionRepository {
 	}
 
 	public getOrCreateVersionIdBySemVer(version: SemVer) {
-		const result = this.getVersionIdBySemVerQuery.all(version.major, version.minor, version.patch) as {id: number}[];
-		if (result.length > 0) {
-			return result[0].id
+		const result = this.getVersionIdBySemVerQuery.get(version.major, version.minor, version.patch);
+		if (result && typeof result['id'] === 'number') {
+			return result['id'];
 		}
 
 		this.createVersion(version);
@@ -61,9 +62,9 @@ export default class VersionRepository {
 	}
 
 	public getOrCreateMinecraftVersionIdBySemVer(version: SemVer) {
-		const result = this.getMinecraftVersionIdBySemVerQuery.all(version.major, version.minor, version.patch) as {id: number}[];
-		if (result.length > 0) {
-			return result[0].id
+		const result = this.getMinecraftVersionIdBySemVerQuery.get(version.major, version.minor, version.patch);
+		if (result && typeof result['id'] === 'number') {
+			return result['id'];
 		}
 
 		this.createMinecraftVersion(version);
@@ -76,8 +77,15 @@ export default class VersionRepository {
 			second_part: secondStart,
 			third_part: thirdStart,
 			limit
-		}) as any[];
-		return result.map(v => new SemVer(v.major, v.minor, v.patch));
+		});
+		return filterMap(
+			result,
+			v => v
+				&& typeof v['major'] === 'number'
+				&& typeof v['minor'] === 'number'
+				&& typeof v['patch'] === 'number'
+				? new SemVer(v['major'], v['minor'], v['patch'])
+				: null);
 	}
 
 	public getFilteredMinecraftVersions(firstStart: string, secondStart: string, thirdStart: string, limit: number) {
@@ -86,8 +94,16 @@ export default class VersionRepository {
 			second_part: secondStart,
 			third_part: thirdStart,
 			limit
-		}) as any[];
-		return result.map(v => new SemVer(v.major, v.minor, v.patch));
+		});
+
+		return filterMap(
+			result,
+			v => v
+				&& typeof v['major'] === 'number'
+				&& typeof v['minor'] === 'number'
+				&& typeof v['patch'] === 'number'
+				? new SemVer(v['major'], v['minor'], v['patch'])
+				: null);
 	}
 
 	public createVersion(version: SemVer) {
