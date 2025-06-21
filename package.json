@@ -24,7 +24,7 @@
 		"typescript": "^5.1.6"
 	},
 	"scripts": {
-		"start": "npm run build && node ./bin",
+		"start": "npm run build && node --enable-source-maps ./bin",
 		"build": "tsc"
 	}
 }
