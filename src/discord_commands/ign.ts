@@ -1,6 +1,5 @@
 import { ChatInputCommandInteraction, ModalSubmitInteraction, SlashCommandBuilder } from "discord.js";
 import { Command } from "../CommandRegistry";
-import Database from "../Database";
 import { BotContext } from "../BingoBot";
 import { constructAndUpdateSeedMessage } from "../util/weekly_seeds";
 import BotConfig from "../BotConfig";

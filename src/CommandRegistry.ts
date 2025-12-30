@@ -11,6 +11,8 @@ import BotConfig from './BotConfig';
 import IgnCommand from './discord_commands/ign';
 import RestartCommand from './discord_commands/restart';
 import { getLogger } from 'log4js';
+import RecapCommand from './discord_commands/recap';
+import RecapDmCommand from './discord_commands/recap-dm';
 
 export interface Command {
 	execute: (interaction: ChatInputCommandInteraction) => Promise<void>,
@@ -36,6 +38,8 @@ export default class CommandRegistry {
 			seed: { data: SeedCommand.data, command: new SeedCommand(this.context, this.config) },
 			ign: { data: IgnCommand.data, command: new IgnCommand(this.context, this.config) },
 			score: { data: ScoreCommand.data, command: new ScoreCommand(this.context, this.config) },
+			recap: { data: RecapCommand.data, command: new RecapCommand(this.context, this.config) },
+			recap_dm: { data: RecapDmCommand.data, command: new RecapDmCommand(this.context, this.config) },
 		}
 
 		const commandLookup: Record<string, { data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder, command: Command}>
@@ -78,7 +82,7 @@ export default class CommandRegistry {
 					}
 				} else if (interaction.isChatInputCommand()) {
 					logInteraction('command', interaction.commandName);
-					const command = commandLookup[interaction.commandName]?.command;
+					const command = commandLookup[interaction.commandName.replace("-", "_")]?.command;
 					if (!command) {
 						this.logger.error(`Could not find matching command definition for ${interaction.commandName}`);
 						return;

@@ -174,7 +174,7 @@ export async function constructAndUpdateSeedMessage(seed: Seed, context: BotCont
 	return message;
 }
 
-export function millisToTimeStamp(millis: number | null, exact = false) {
+export function millisToTimeStamp(millis: number | null, exact = false, trim_empty = false) {
 	if (!millis) {
 		return 'DNF';
 	}
@@ -184,7 +184,7 @@ export function millisToTimeStamp(millis: number | null, exact = false) {
 	cur -= cur % partialUpperBound;
 	cur /= partialUpperBound;
 
-	if (exact) {
+	if (trim_empty) {
 		while (result.endsWith('0') || result.endsWith('.')) {
 			result = result.substring(0, result.length - 1);
 		}

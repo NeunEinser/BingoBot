@@ -1,5 +1,5 @@
 import { DatabaseSync, StatementSync } from "node:sqlite";
-import SeedRepository, { Seed } from "./SeedRepository";
+import SeedRepository, { GAME_TYPES, GameType, gameTypeFromInt, Seed } from "./SeedRepository";
 import PlayerRepository, { Player } from "./PlayerRepository";
 import { createMapper, filterMap, TypeMap } from "../util/type_utils";
 
@@ -8,33 +8,6 @@ const URL_TYPES = Object.freeze(
 )
 
 export type UrlType = (typeof URL_TYPES)[number]
-
-// export interface RawScore {
-// 	rank: number | null;
-// 	seed__id: number;
-// 	seed__seed: number;
-// 	seed__game_type: number,
-// 	seed__game_type_specific: string | number | bigint | null;
-// 	seed__description: string | null;
-// 	seed__week__id: number,
-// 	seed__week__week: number;
-// 	seed__week__version: string;
-// 	seed__week__max_version: string | null;
-// 	seed__week__mc_version: string;
-// 	seed__week__max_mc_version: string | null;
-// 	seed__week__published_on_unix_millis?: number | null;
-// 	seed__week__discord_message_id: string | null;
-// 	seed__week__description: string | null;
-// 	player__id: number;
-// 	player__in_game_name: string;
-// 	player__discord_id: string;
-// 	points: number | null;
-// 	time_in_millis: number | null;
-// 	url_type: number;
-// 	url: string;
-// 	submitted_at: number;
-// 	description: string | null;
-// }
 
 export interface Score {
 	rank: number | null;
@@ -46,6 +19,25 @@ export interface Score {
 	url: string | null;
 	submitted_at: Date;
 	description: string | null;
+}
+
+export interface RecapOverview {
+	seeds: number | null;
+	weeks: number | null;
+	min_rank: number | null;
+}
+
+export interface RecapGameTypeOverview {
+	game_type: GameType;
+	practiced: boolean;
+	count: number;
+	average_points: number | null;
+	average_time: number | null;
+	average_rank: number | null;
+}
+
+export interface RecapGameTypeCloverColorOverview extends RecapGameTypeOverview {
+	description: string;
 }
 
 const SCORE_TYPE_MAP = Object.freeze(
@@ -61,37 +53,39 @@ const SCORE_TYPE_MAP = Object.freeze(
 		description: [ 'string', 'null' ],
 	} satisfies TypeMap<Score>);
 
-const DEFAULT_QUERY = `SELECT
-	CASE
-		WHEN score.url_type = 1
-		THEN (
-			SELECT COUNT(*) + 1
-			FROM player_scores x
-				JOIN players xp ON x.player_id = xp.id
-			WHERE x.seed_id = seed.id
-				AND x.url_type = 1
-				AND xp.in_game_name NOT NULL
-				AND (
-					(
-						seed.game_type = 6
-						AND (
-							x.points > score.points
-							OR (
-								x.points = score.points
-								AND x.time_in_millis NOT NULL 
-								AND (score.time_in_millis ISNULL OR x.time_in_millis < score.time_in_millis)
-							)
+const RANK_SELECT = `CASE
+	WHEN score.url_type = 1
+	THEN (
+		SELECT COUNT(*) + 1
+		FROM player_scores x
+			JOIN players xp ON x.player_id = xp.id
+		WHERE x.seed_id = seed.id
+			AND x.url_type = 1
+			AND xp.in_game_name NOT NULL
+			AND (
+				(
+					seed.game_type = 6
+					AND (
+						x.points > score.points
+						OR (
+							x.points = score.points
+							AND x.time_in_millis NOT NULL 
+							AND (score.time_in_millis ISNULL OR x.time_in_millis < score.time_in_millis)
 						)
 					)
-					OR (
-						seed.game_type != 6
-						AND x.time_in_millis NOT NULL 
-						AND (score.time_in_millis ISNULL OR x.time_in_millis < score.time_in_millis)
-					)
 				)
-		)
-		ELSE NULL
-	END rank,
+				OR (
+					seed.game_type != 6
+					AND x.time_in_millis NOT NULL 
+					AND (score.time_in_millis ISNULL OR x.time_in_millis < score.time_in_millis)
+				)
+			)
+	)
+	ELSE NULL
+END`
+
+const DEFAULT_QUERY = `SELECT
+	${RANK_SELECT} rank,
 	score.points,
 	score.time_in_millis,
 	score.url_type,
@@ -133,6 +127,11 @@ export default class ScoreRepository {
 	private readonly getPlayerScoresBySeedQuery: StatementSync;
 	private readonly createOrUpdatePlayerScoreQuery: StatementSync;
 	private readonly deletePlayerScoreQuery: StatementSync;
+	private readonly recapPlayersQuery: StatementSync;
+	private readonly recapOverviewQuery: StatementSync;
+	private readonly recapGameTypeOverviewQuery: StatementSync;
+	private readonly recapGameTypeBestQuery: StatementSync;
+	private readonly recapGameTypeCloverColorQuery: StatementSync;
 
 	constructor(
 		db: DatabaseSync,
@@ -164,6 +163,68 @@ export default class ScoreRepository {
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`);
 		this.deletePlayerScoreQuery = db.prepare('DELETE FROM player_scores WHERE player_id = ? AND seed_id = ?');
+		
+		this.recapPlayersQuery = db.prepare(`SELECT DISTINCT
+				player.discord_id
+			FROM player_scores score
+				JOIN players player ON player.id = score.player_id
+				JOIN seeds seed ON seed.id = score.seed_id
+				JOIN weeks week ON week.id = seed.week_id
+			WHERE CAST(strftime('%Y', week.published_on_unix_millis / 1000, 'unixepoch') AS int) = ?`);
+		this.recapOverviewQuery = db.prepare(`SELECT
+				COUNT(*) seeds,
+				COUNT(DISTINCT seed.week_id) weeks,
+				MIN(${RANK_SELECT}) min_rank
+			FROM player_scores score
+				JOIN seeds seed ON seed.id = score.seed_id
+				JOIN weeks week ON week.id = seed.week_id
+			WHERE score.player_id = ?
+				AND CAST(strftime('%Y', week.published_on_unix_millis / 1000, 'unixepoch') AS int) = ?`);
+		this.recapGameTypeOverviewQuery = db.prepare(`SELECT
+				seed.game_type,
+				seed.practiced,
+				COUNT(*) count,
+				AVG(score.points) average_points,
+				AVG(score.time_in_millis) average_time,
+				AVG(${RANK_SELECT}) average_rank
+			FROM player_scores score
+				JOIN seeds seed ON seed.id = score.seed_id
+				JOIN weeks week ON week.id = seed.week_id
+			WHERE score.player_id = ?
+				AND CAST(strftime('%Y', week.published_on_unix_millis / 1000, 'unixepoch') AS int) = ?
+			GROUP BY seed.game_type, seed.practiced
+			ORDER BY seed.practiced, seed.game_type`);
+		this.recapGameTypeBestQuery = db.prepare(`${DEFAULT_QUERY}
+			WHERE score.player_id = ?
+				AND seed.game_type = ?
+				AND seed.practiced = ?
+				AND CAST(strftime('%Y', week.published_on_unix_millis / 1000, 'unixepoch') AS int) = ?
+			ORDER BY
+				score.points DESC, 
+				CASE WHEN score.time_in_millis NOT NULL THEN 0 ELSE 1 END,
+				score.time_in_millis ASC
+			LIMIT 1`);
+		this.recapGameTypeCloverColorQuery = db.prepare(`SELECT
+				seed.game_type,
+				seed.practiced,
+				score.description,
+				COUNT(*) count,
+				AVG(score.points) average_points,
+				AVG(score.time_in_millis) average_time,
+				AVG(${RANK_SELECT}) average_rank
+			FROM player_scores score
+				JOIN seeds seed ON seed.id = score.seed_id
+				JOIN weeks week ON week.id = seed.week_id
+			WHERE score.player_id = 7
+				AND score.description NOT NULL
+				AND CAST(strftime('%Y', week.published_on_unix_millis / 1000, 'unixepoch') AS int) = ?
+			GROUP BY seed.game_type, seed.practiced, score.description
+			ORDER BY
+				seed.practiced,
+				seed.game_type,
+				average_points DESC,
+				CASE WHEN average_time NOT NULL THEN 0 ELSE 1 END,
+				average_time`);
 	}
 
 	public getPlayerScore(player_id: number, seed_id: number) {
@@ -180,6 +241,36 @@ export default class ScoreRepository {
 
 	public getPlayerScoresBySeed(seed_id: number, maxResults: number) {
 		return filterMap(this.getPlayerScoresBySeedQuery.all(seed_id, maxResults), ScoreRepository.mapScore);
+	}
+
+	public getRecapPlayers(year: number) {
+		return filterMap(this.recapPlayersQuery.all(year), ScoreRepository.mapRecapPlayers);
+	}
+	public getRecapOverview(player_id: number, year: number) {
+		return ScoreRepository.mapRecapOverview(this.recapOverviewQuery.get(player_id, year));
+	}
+
+	public getRecapGameTypeOverview(player_id: number, year: number) {
+		return filterMap(
+			this.recapGameTypeOverviewQuery.all(player_id, year),
+			ScoreRepository.mapRecapGameTypeOverview
+		);
+	}
+
+	public getRecapGameTypeBest(player_id: number, game_type: GameType, practiced: boolean, year: number) {
+		return ScoreRepository.mapScore(this.recapGameTypeBestQuery.get(
+			player_id,
+			GAME_TYPES.indexOf(game_type),
+			practiced ? 1 : 0,
+			year
+		));
+	}
+
+	public getRecapGameTypeCloverColor(year: number) {
+		return filterMap(
+			this.recapGameTypeCloverColorQuery.all(year),
+			ScoreRepository.mapRecapGameTypeCloverColorOverview
+		);
 	}
 
 	public createOrUpdatePlayerScore(seed_id: number, player_id: number, points: number | null, time_in_millis: number | null, url_type?: UrlType | null, url?: string | null, description?: string | null) {
@@ -199,4 +290,29 @@ export default class ScoreRepository {
 	}
 
 	public static mapScore = createMapper<Score>(SCORE_TYPE_MAP);
+	public static mapRecapPlayers = createMapper<{discord_id: string}>({
+		discord_id: ["string"]
+	})
+	public static mapRecapOverview = createMapper<RecapOverview>({
+		seeds: [ "number", "null" ],
+		weeks: [ "number", "null" ],
+		min_rank: [ "number", "null" ],
+	});
+	public static mapRecapGameTypeOverview = createMapper<RecapGameTypeOverview>({
+		game_type: [ gameTypeFromInt ],
+		practiced: [ "boolean" ],
+		count: [ "number" ],
+		average_rank: [ "number", "null" ],
+		average_points: [ "number", "null" ],
+		average_time: [ "number", "null" ],
+	});
+	public static mapRecapGameTypeCloverColorOverview = createMapper<RecapGameTypeCloverColorOverview>({
+		game_type: [ gameTypeFromInt ],
+		practiced: [ "boolean" ],
+		description: [ "string" ],
+		count: [ "number" ],
+		average_rank: [ "number", "null" ],
+		average_points: [ "number", "null" ],
+		average_time: [ "number", "null" ],
+	});
 }

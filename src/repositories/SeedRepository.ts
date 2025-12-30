@@ -48,12 +48,14 @@ export interface Seed {
 	week: Week;
 }
 
+export const gameTypeFromInt = (v: any) => (typeof v === 'number') ? (GAME_TYPES[v] ?? null) : null;
+
 const SEED_TYPE_MAP = Object.freeze(
 	{
 		id: [ 'number' ],
 		seed: [ 'number' ],
 		practiced: [ 'boolean' ],
-		game_type: [ (v) => (typeof v === 'number') ? (GAME_TYPES[v] ?? null) : null ],
+		game_type: [ gameTypeFromInt ],
 		game_type_specific: [ 'string', 'number', 'bigint', 'null' ],
 		discord_message_id: [ 'string', 'null' ],
 		description: [ 'string', 'null' ],
