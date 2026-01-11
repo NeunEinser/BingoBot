@@ -9,6 +9,7 @@ import { getLogger } from "log4js";
 
 interface ModalOptions {
 	include_ign?: boolean,
+	ign?: string | null,
 	points?: number | string | null,
 	time?: string | null,
 	video_url?: string | null,
@@ -269,8 +270,9 @@ export default class ScoreCommand implements Command {
 			.setTitle(`Submit ${seed.game_type === 'points' ? 'points' : 'time'} for seed ${seed.seed}`)
 			.setCustomId(`${SUBMIT_SCORE_ID}_${seed.id}`)
 
+		let ign_input = undefined;
 		if (options?.include_ign) {
-			const ign_input = new TextInputBuilder()
+			ign_input = new TextInputBuilder()
 				.setCustomId('ign')
 				.setLabel('What is your in-game name?')
 				.setStyle(TextInputStyle.Short)
@@ -327,6 +329,9 @@ export default class ScoreCommand implements Command {
 			if (options.points !== undefined && options.points !== null) {
 				points_input?.setValue(options.points.toString());
 			}
+			if (options.ign) {
+				ign_input?.setValue(options.ign);
+			}
 			if (options.time) {
 				time_input.setValue(options.time);
 			}
@@ -347,6 +352,20 @@ export default class ScoreCommand implements Command {
 
 	async handleModalSubmit(interaction: ModalSubmitInteraction) {
 		const seed_id = parseInt(interaction.customId.substring(SUBMIT_SCORE_ID.length + 1));
+
+		const getInGameName = (): { is_error: true, error_message: string, ign?: undefined } | { is_error: false, error_message?: undefined, ign: string } => {
+			try {
+				const ign = interaction.fields.getTextInputValue('ign');
+				if (!ign.match(/^[a-zA-Z0-9_]{3,16}$/)) {
+					return { is_error: true, error_message: 'Invalid in-game name.' };
+				}
+				return { is_error: false, ign };
+			} catch {
+				this.logger.error('Modal submit did not contain an in-game name even though it should have.');
+				return { is_error: true, error_message: 'Expected in-game name in submission.' };
+			}
+		}
+
 		const seed = this.context.db.seeds.getSeed(seed_id);
 		if (!seed) {
 			await interaction.reply({ content: `Could not find seed with id ${seed_id}.`, ephemeral: true });
@@ -355,7 +374,8 @@ export default class ScoreCommand implements Command {
 
 		let player = this.context.db.players.getPlayerByDiscordId(interaction.user.id);
 		if (!player) {
-			this.context.db.players.createPlayer(interaction.user.id);
+			const { ign } = getInGameName();
+			this.context.db.players.createPlayer(interaction.user.id, ign ?? null);
 			player = this.context.db.players.getPlayer(this.context.db.getLastInsertRowId())!
 		}
 
@@ -389,6 +409,7 @@ export default class ScoreCommand implements Command {
 				timeout,
 				options: {
 					include_ign: !player.in_game_name,
+					ign: player.in_game_name,
 					points,
 					time,
 					image_url,
@@ -406,18 +427,12 @@ export default class ScoreCommand implements Command {
 
 		try {
 			if (!player.in_game_name) {
-				try {
-					const ign = interaction.fields.getTextInputValue('ign');
-					if (!ign.match(/^[a-zA-Z0-9_]{3,16}$/)) {
-						await postError('Invalid in-game name.');
-						return;
-					}
-					this.context.db.players.setIgn(interaction.user.id, ign);
-					player.in_game_name = ign;
-				} catch {
-					this.logger.error('Modal submit did not contain an in-game name even though it should have.');
-					await postError('Expected in-game name in submission.');
-					return;
+				const ign_result = getInGameName()
+				if (ign_result.is_error) {
+					await postError(ign_result.error_message);
+				} else {
+					this.context.db.players.setIgn(interaction.user.id, ign_result.ign);
+					player.in_game_name = ign_result.ign;
 				}
 			}
 
@@ -553,7 +568,8 @@ export default class ScoreCommand implements Command {
 			time_in_millis += partial;
 		}
 
-		// ts can't wrap its head around the method overload.
+		// It's always ChatInputCommandInteraction here, ts can't wrap its head around the method
+		// overload.
 		player ??= await this.getOrCreatePlayer(interaction as ChatInputCommandInteraction);
 		this.context.db.scores.createOrUpdatePlayerScore(
 			seed.id,
@@ -570,11 +586,13 @@ export default class ScoreCommand implements Command {
 			await interaction.reply({ content: 'Successfully registered your score.', ephemeral});
 		}
 
-		try {
-			await constructAndUpdateSeedMessage(seed, this.context, this.config);
-		} catch (err) {
-			this.logger.error(`Failed to refresh scoreboard for ${interaction.user.displayName}:\n${err}`);
-			await interaction.followUp({ content: 'Failed to refresh scoreboard.', ephemeral});
+		if (player.in_game_name) {
+			try {
+				await constructAndUpdateSeedMessage(seed, this.context, this.config);
+			} catch (err) {
+				this.logger.error(`Failed to refresh scoreboard for ${interaction.user.displayName}:\n${err}`);
+				await interaction.followUp({ content: 'Failed to refresh scoreboard.', ephemeral});
+			}
 		}
 		return { is_error: false };
 	}
