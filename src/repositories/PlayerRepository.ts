@@ -3,12 +3,12 @@ import { mapTo, type TypeMap } from "../util/type_utils";
 
 export interface Player {
 	id: number;
-	in_game_name: string;
+	in_game_name: string | null;
 	discord_id: string;
 }
 
 const PLAYER_TYPE_MAP = Object.freeze(
-	{ id: [ 'number' ], in_game_name: [ 'string' ], discord_id: [ 'string' ] } satisfies TypeMap<Player>);
+	{ id: [ 'number' ], in_game_name: [ 'string', 'null' ], discord_id: [ 'string' ] } satisfies TypeMap<Player>);
 
 export default class PlayerRepository {
 	
