@@ -229,7 +229,7 @@ export default class SeedCommand implements Command {
 				}
 
 				await constructAndUpdateSeedMessage(seed, this.context, this.config);
-				await interaction.reply(`Refreshed discord message for seed ${seed_id} succesully.`);
+				await interaction.reply(`Refreshed discord message for seed ${seed_id} successfully.`);
 				break;
 			}
 		}
