@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionChoiceData, AutocompleteInteraction, ChatInputCommandInteraction, Collection, Events, MessageFlags, SlashCommandBuilder, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder } from 'discord.js';
+import { ApplicationCommandOptionChoiceData, AutocompleteInteraction, ButtonInteraction, CacheType, ChatInputCommandInteraction, Collection, CommandInteraction, Events, MessageFlags, ModalSubmitInteraction, SlashCommandBuilder, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder } from 'discord.js';
 import BingoBot, { BotContext } from './BingoBot';
 import PingCommand from './discord_commands/ping';
 import IntroCommand from './discord_commands/intro';
@@ -116,22 +116,20 @@ export default class CommandRegistry {
 			} catch (err) {
 				try {
 					this.logger.error(err);
-					const reply = async (message: string) => {
-						if(interaction.isCommand()) {
-							if (interaction.replied || interaction.deferred) {
-								await interaction.followUp(message);
-							} else {
-								await interaction.reply(message);
-							}
+					const reply = async (interaction: CommandInteraction<CacheType> | ButtonInteraction<CacheType> | ModalSubmitInteraction<CacheType>, message: string) => {
+						if (interaction.replied || interaction.deferred) {
+							await interaction.followUp(message);
+						} else {
+							await interaction.reply(message);
 						}
 					}
 
 					if(interaction.isCommand()) {
-						await reply("Command execution failed");
+						await reply(interaction, "Command execution failed");
 					} else if (interaction.isButton()) {
-						await reply("Failed to process button click");
+						await reply(interaction, "Failed to process button click");
 					} else if (interaction.isModalSubmit()) {
-						await reply("Failed to submit modal");
+						await reply(interaction, "Failed to submit modal");
 					} else if (interaction.isAutocomplete()) {
 						await interaction.respond([]);
 					}
