@@ -116,12 +116,24 @@ export default class CommandRegistry {
 			} catch (err) {
 				try {
 					this.logger.error(err);
-					if(interaction.isCommand()) {
-						if (interaction.replied || interaction.deferred) {
-							await interaction.followUp("Command execution failed");
-						} else {
-							await interaction.reply("Command execution failed");
+					const reply = async (message: string) => {
+						if(interaction.isCommand()) {
+							if (interaction.replied || interaction.deferred) {
+								await interaction.followUp(message);
+							} else {
+								await interaction.reply(message);
+							}
 						}
+					}
+
+					if(interaction.isCommand()) {
+						await reply("Command execution failed");
+					} else if (interaction.isButton()) {
+						await reply("Failed to process button click");
+					} else if (interaction.isModalSubmit()) {
+						await reply("Failed to submit modal");
+					} else if (interaction.isAutocomplete()) {
+						await interaction.respond([]);
 					}
 				} catch (_) {}
 			}
